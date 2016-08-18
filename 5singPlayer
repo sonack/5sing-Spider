@@ -1,0 +1,337 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+from bs4 import BeautifulSoup
+import requests
+import urllib.parse
+import urllib.request
+import threading
+import getch
+import pickle
+import json
+import html
+import time
+import math
+import sys
+import re
+import os
+
+sType = {}
+sType[0] = 'yc'
+sType[1] = 'fc'
+sType[2] = 'bz'
+
+rsType = {}
+rsType['yc']='1'
+rsType['fc']='2'
+rsType['bz']='3'
+
+yc = []
+fc = []
+bz = []
+singerNames = {}
+singerNames[1] = '井井酱'
+singerNames[2] = '封茗囧菌'
+singerNames[3] = 'Midaho'
+
+directory = '/home/snk/Music/5sing'
+singerName = "无名氏"
+
+sess = requests.Session()
+headers = {
+'Accept':'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+'Accept-Encoding':'gzip, deflate, sdch',
+'Accept-Language':'zh-CN,zh;q=0.8',
+'Cache-Control':'max-age=0',
+'Connection':'keep-alive',
+'Upgrade-Insecure-Requests':'1',
+'User-Agent':'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/47.0.2526.106 Safari/537.36'
+}
+sess.headers = headers
+
+def login5sing(update):
+    if update:
+        print('登陆中...')
+        loginURL = 'http://5sing.kugou.com/login/'
+        login_data = {}
+        login_data['txtUserName'] = '18245035112'
+        login_data['txtPassword'] = '5singbofangqi'
+        r = sess.post(loginURL,data=login_data)
+        if r:
+            with open('cookies.dat','wb') as f:
+                pickle.dump(sess.cookies,f)
+            print('更新Cookie成功!')
+        return r
+    else:
+        with open('cookies.dat','rb') as f:
+            sess.cookies = pickle.load(f)
+        if sess.cookies:
+                print('读取Cookie成功!')
+        return sess.cookies
+
+def br2gn(s):
+    s = s.replace('<br>','\n\t')
+    s = s.replace('<br/>','\n\t')
+    s = s.replace('<br >','\n\t')
+    s = s.replace('<br />','\n\t')
+    return s
+
+class Song:
+    def __init__(self,name,ID,TY):
+        self.name = name
+        self.ID = ID
+        self.TY = TY
+    def __str__(self):
+        return self.name;
+
+
+def getDownloadPath(chooseID):
+    position  = os.path.join(directory,singerName)
+    #print(position)
+    if not os.path.exists(position):
+        print('创建文件夹',position,'!')
+        os.makedirs(position)
+    filePath = os.path.join(position,fc[chooseID].name)+'.mp3'
+    return filePath
+
+def getInfoDict(songID,songType):
+    data = {}
+    data['songid'] = str(songID)
+    data['songtype'] = str(songType)
+    url = 'http://5sing.kugou.com/my/songDownload/download'
+    r = sess.post(url,data=data)
+    bsObj = BeautifulSoup(r.content)
+    jsonData = bsObj.p.string
+    #print('jsonData',jsonData)
+    infoDict = json.loads(jsonData)
+    return infoDict
+
+def getDownloadURL(chooseID):
+    ID = fc[chooseID].ID
+    TY = fc[chooseID].TY
+    return getInfoDict(ID,TY)['data']['url']
+
+
+def downloadSong(chooseID):
+    filename = getDownloadPath(chooseID)
+    downloadUrl = getDownloadURL(chooseID)
+    if not os.path.exists(filename):    
+        print('downloading from',downloadUrl,'...')
+        t = threading.Thread(target=urllib.request.urlretrieve,args = (downloadUrl,filename),name='DownloadThread')
+        t.start()
+    return filename,downloadUrl
+
+def searchSinger():
+    print('请输入歌手名称:\n')
+    print('收藏夹:\n')
+    for i,x in singerNames.items():
+        print(i,":",x,'\n')
+    singerName = input()
+    if singerName == "":
+        singerName = '1'
+    try:
+      singerIdx = int(singerName)
+      if singerIdx < 30:
+          singerName = singerNames[singerIdx]
+          print('你选中了',singerName)
+    except Exception as e:
+        pass 
+    params = {}
+    params['keyword'] = singerName
+    url = 'http://search.5sing.kugou.com/?'+ urllib.parse.urlencode(params)
+    r = sess.get(url)
+    html = r.content.decode('utf-8')
+    rep = r"[\s\S]*?matchInfo = '([\s\S]*?)';[\s\S]*";
+    m = re.match(rep,html)
+    jsonData = m.group(1);
+    searchRes = json.loads(str(jsonData))
+    return searchRes
+
+def displaySingerInfo(searchRes):
+    name = searchRes['originalName']
+    city = searchRes['city']
+    style = searchRes['style']
+    fans = searchRes['fans']
+    popularity = searchRes['popularity']
+    totalSong = searchRes['totalSong']
+    followed = searchRes['followed']
+    description = searchRes['description']
+    sex = searchRes['sex']
+    ID = searchRes['id']
+    print('歌手信息如下:')
+    print('===================')
+    print('姓名:\t%s' % name)
+    print('性别:\t%s' % '女' if sex else 男)
+    print('城市:\t%s' % city)
+    print('风格:\t%s' % style)
+    print('粉丝数:\t%s' % fans)
+    print('人气:\t%s' % popularity)
+    print('总歌曲:\t%s' % totalSong)
+    if(followed):
+        print('已关注')
+    else:
+        print('未关注')
+    print('描述:\n\t%s' % br2gn(html.unescape(description)))
+    print('===================')
+    return ID,name
+
+def fetchHomePage(ID):
+    url = 'http://5sing.kugou.com/' + ID+ '/default.html'
+    print('fetch home page',url)
+    r = sess.get(url)
+    bsObj = BeautifulSoup(r.content)
+    #print(bsObj.prettify())
+
+
+def getSongsByUrl(url):
+    html = sess.get(url)
+    bsObj = BeautifulSoup(html.content)
+    songList = bsObj.find('div',{'class':'song_list'})
+    songs = songList.findAll('a',{'target':'_blank'})
+    realSongs = [songs[x] for x in range(len(songs)) if x%2 == 0]
+    for song in realSongs:
+        songName = song['title'].strip()
+        href = song['href']
+        r = re.match(r'http://5sing.kugou.com/(\w+)/(\d+).html',href)
+        songaddr = r.groups()
+        if songaddr[0] == 'yc':
+            yc.append(Song(songName,songaddr[1],rsType[songaddr[0]]))
+        elif songaddr[0] == 'fc':
+            fc.append(Song(songName,songaddr[1],rsType[songaddr[0]]))
+        elif songaddr[0] == 'bz':
+            bz.append(Song(songName,songaddr[1],rsType[songaddr[0]]))
+        #print(getInfoDict(songaddr[1],rsType[songaddr[0]])
+
+def processList(singerID,i):
+    print('===================')
+    if i == 0:
+        print('原创歌曲:')
+    elif i == 1:
+        print('翻唱歌曲:')
+    elif i == 2:
+        print('伴奏:')
+    initUrl = 'http://5sing.kugou.com/'+ singerID + '/' + sType[i] + '/1.html'
+    html = sess.get(initUrl)
+    bsObj = BeautifulSoup(html.content)
+    total = bsObj.find('span', {'class':'song_tit_total'}).string
+    print(total)
+    totalNum = int(re.match(r'\((\d+)首\)',total).group(1))
+    pageNum = math.ceil(totalNum/10)
+    if totalNum > 0:
+        #print('歌曲列表:')
+        for page in range(pageNum):
+            url = 'http://5sing.kugou.com/' + singerID + '/' + sType[i] + '/' + str(page+1) + '.html'
+            getSongsByUrl(url)
+
+def getAllSongs(ID):
+    print('get all songs start...')
+    for i in range(3):
+        processList(ID,i)
+    print('===================')
+'''
+songID = input('请输入歌曲ID: ')
+songType = input('请输入歌曲类型: ')
+info = getInfoDict(songID,songType)
+downloadSong(info['data']['url'])
+os.system('play 歌曲1.mp3')
+'''
+
+def showSongList():
+    os.system('clear')
+    print('\n\n=====================================')
+    print('\t\t\t\t原创')
+    print('(共有%d首)' % len(yc))
+    for idx,x in enumerate(yc):
+        print(idx,':',x)
+    print('-------------------------------------')
+    print('\t\t\t\t翻唱')
+    print('(共%d首)' % len(fc))
+    for idx,x in enumerate(fc):
+        print(idx,':',x)
+    print('-------------------------------------')
+    print('\t\t\t\t伴奏')
+    print('(共%d首)' % len(bz))
+    for idx,x in enumerate(bz):
+        print(idx,':',x)
+    print('=====================================\n\n')
+    print('操作说明:\tl.列表\tp.暂停\tc.继续\ts.停止\tq.退出')
+    
+def play_music(filename,url):
+    print('当前正在播放',os.path.split(filename)[1])
+    t2 = threading.Thread(target = os.system,args=('play --ignore-length -q \''+ url + '\'' + ' &>/dev/null',),name = 'PlayingMusicThread')
+    t2.start()
+    return t2
+
+idx = 0
+circle = False
+
+def circlePlayMusic():
+    global circle
+    while circle:
+        global idx
+        filename,downloadUrl = downloadSong(idx)
+        time.sleep(1)
+        print('当前正在播放',os.path.split(filename)[1])
+        # Block until the next song, circlePlayMusic itself is a thread
+        os.system('play --ignore-length -q \''+ downloadUrl + '\'' + ' &>/dev/null')
+        idx = (idx + 1) % len(fc)
+        
+
+
+
+
+if __name__ == '__main__':
+    update = False
+    if len(sys.argv) > 1 and sys.argv[1] == 'update':
+        update = True
+    if login5sing(update):
+        print(time.strftime("%Y年%m月%d日 %H:%M:%S",time.localtime()))
+    singerInfo = searchSinger()
+    singerID,singerName = displaySingerInfo(singerInfo)
+    #fetchHomePage(singerID)
+    getAllSongs(singerID)
+    showSongList()
+    
+    while True:
+        leave = False
+        while not leave:
+            try:
+                if not circle:
+                    idx = int(input('请输入要听的歌的标号(默认是翻唱): '))
+                    if idx == -1:
+                        print('循环播放...')
+                        circle = True
+                        idx = 0
+                    filename,downloadUrl = downloadSong(idx)
+                    time.sleep(1)
+                    nowMusic = play_music(filename,downloadUrl)
+            except ValueError as e:
+                print('请输入正确的值!')
+            else:
+                leave = True
+       
+        #print('操作说明:\tl.列表\tp.暂停\tc.继续\ts.停止\tq.退出')
+        
+        if circle:
+            t3 = threading.Thread(target = circlePlayMusic,name = "ListeningMusicEndThread")
+            t3.start()
+        while True:
+            opt = getch.getch()
+            if opt == 'l':
+                showSongList()
+            elif opt == 'p':
+                os.system("kill -19 `pidof play` &>/dev/null")
+            elif opt == 'c':
+                os.system('kill -18 `pidof play` &>/dev/null')
+            elif opt == 's':
+                os.system("kill -2 `pidof play` &>/dev/null")
+                circle = False
+                break
+            elif opt == 'q':
+                os.system("kill -2 `pidof play` &>/dev/null")
+                os._exit(0)
+
+     
+            
+        
+
