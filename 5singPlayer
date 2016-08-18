@@ -6,8 +6,9 @@ import requests
 import urllib.parse
 import urllib.request
 import threading
-import getch
+import random
 import pickle
+import signal
 import json
 import html
 import time
@@ -29,13 +30,15 @@ rsType['bz']='3'
 yc = []
 fc = []
 bz = []
+songslist = []
+
 singerNames = {}
 singerNames[1] = '井井酱'
 singerNames[2] = '封茗囧菌'
 singerNames[3] = 'Midaho'
 
 directory = '/home/snk/Music/5sing'
-singerName = "无名氏"
+singerName = "未命名"
 
 sess = requests.Session()
 headers = {
@@ -51,7 +54,7 @@ sess.headers = headers
 
 def login5sing(update):
     if update:
-        print('登陆中...')
+        print('\n登陆中...')
         loginURL = 'http://5sing.kugou.com/login/'
         login_data = {}
         login_data['txtUserName'] = '18245035112'
@@ -60,13 +63,13 @@ def login5sing(update):
         if r:
             with open('cookies.dat','wb') as f:
                 pickle.dump(sess.cookies,f)
-            print('更新Cookie成功!')
+            print('\n更新Cookie成功!\n')
         return r
     else:
         with open('cookies.dat','rb') as f:
             sess.cookies = pickle.load(f)
         if sess.cookies:
-                print('读取Cookie成功!')
+                print('\n读取Cookie成功!\n')
         return sess.cookies
 
 def br2gn(s):
@@ -91,7 +94,7 @@ def getDownloadPath(chooseID):
     if not os.path.exists(position):
         print('创建文件夹',position,'!')
         os.makedirs(position)
-    filePath = os.path.join(position,fc[chooseID].name)+'.mp3'
+    filePath = os.path.join(position,songslist[chooseID].name)+'.mp3'
     return filePath
 
 def getInfoDict(songID,songType):
@@ -107,33 +110,43 @@ def getInfoDict(songID,songType):
     return infoDict
 
 def getDownloadURL(chooseID):
-    ID = fc[chooseID].ID
-    TY = fc[chooseID].TY
+    ID = songslist[chooseID].ID
+    TY = songslist[chooseID].TY
     return getInfoDict(ID,TY)['data']['url']
 
+
+def downloadSongMain(downloadUrl,filename):
+    try:
+        urllib.request.urlretrieve(downloadUrl,filename)
+    except Exception as e:
+        print('网络出错...')
 
 def downloadSong(chooseID):
     filename = getDownloadPath(chooseID)
     downloadUrl = getDownloadURL(chooseID)
-    if not os.path.exists(filename):    
-        print('downloading from',downloadUrl,'...')
-        t = threading.Thread(target=urllib.request.urlretrieve,args = (downloadUrl,filename),name='DownloadThread')
-        t.start()
+    if not os.path.exists(filename):
+        try:    
+            print('正在缓存',downloadUrl,'...')
+            t = threading.Thread(target=downloadSongMain,args = (downloadUrl,filename),name='DownloadThread')
+            t.start()
+        except Exception as e:
+            print('下载出错...')
     return filename,downloadUrl
 
 def searchSinger():
-    print('请输入歌手名称:\n')
+    print('================================================================================')
     print('收藏夹:\n')
     for i,x in singerNames.items():
-        print(i,":",x,'\n')
-    singerName = input()
+        print(i,":",x)
+    singerName = input('\n请输入歌手名称(或者在收藏夹中的编号,默认为1):\t')
     if singerName == "":
         singerName = '1'
     try:
       singerIdx = int(singerName)
+      # Default Collections Size Is 30
       if singerIdx < 30:
           singerName = singerNames[singerIdx]
-          print('你选中了',singerName)
+          print('\n你选择了',singerIdx,':',singerName)
     except Exception as e:
         pass 
     params = {}
@@ -158,8 +171,8 @@ def displaySingerInfo(searchRes):
     description = searchRes['description']
     sex = searchRes['sex']
     ID = searchRes['id']
+    print('\n============================================================================\n')
     print('歌手信息如下:')
-    print('===================')
     print('姓名:\t%s' % name)
     print('性别:\t%s' % '女' if sex else 男)
     print('城市:\t%s' % city)
@@ -172,16 +185,15 @@ def displaySingerInfo(searchRes):
     else:
         print('未关注')
     print('描述:\n\t%s' % br2gn(html.unescape(description)))
-    print('===================')
+    print('\n\n============================================================================\n')
     return ID,name
 
 def fetchHomePage(ID):
     url = 'http://5sing.kugou.com/' + ID+ '/default.html'
-    print('fetch home page',url)
-    r = sess.get(url)
-    bsObj = BeautifulSoup(r.content)
-    #print(bsObj.prettify())
-
+    print('Open Home Page',url)
+    #r = sess.get(url)
+    #bsObj = BeautifulSoup(r.content)
+    os.system('google-chrome ' + url)
 
 def getSongsByUrl(url):
     html = sess.get(url)
@@ -203,18 +215,16 @@ def getSongsByUrl(url):
         #print(getInfoDict(songaddr[1],rsType[songaddr[0]])
 
 def processList(singerID,i):
-    print('===================')
-    if i == 0:
-        print('原创歌曲:')
-    elif i == 1:
-        print('翻唱歌曲:')
-    elif i == 2:
-        print('伴奏:')
     initUrl = 'http://5sing.kugou.com/'+ singerID + '/' + sType[i] + '/1.html'
     html = sess.get(initUrl)
     bsObj = BeautifulSoup(html.content)
     total = bsObj.find('span', {'class':'song_tit_total'}).string
-    print(total)
+    if i == 0:
+        print('原创歌曲:\t'+total)
+    elif i == 1:
+        print('翻唱歌曲:\t'+total)
+    elif i == 2:
+        print('伴奏:\t\t'+total)
     totalNum = int(re.match(r'\((\d+)首\)',total).group(1))
     pageNum = math.ceil(totalNum/10)
     if totalNum > 0:
@@ -224,10 +234,13 @@ def processList(singerID,i):
             getSongsByUrl(url)
 
 def getAllSongs(ID):
-    print('get all songs start...')
+    global songslist
+    print('正在获取歌曲......\n')
     for i in range(3):
         processList(ID,i)
-    print('===================')
+    songslist = yc + fc + bz
+    print('\n\t\t共' + str(len(songslist)) + '首')
+
 '''
 songID = input('请输入歌曲ID: ')
 songType = input('请输入歌曲类型: ')
@@ -237,99 +250,86 @@ os.system('play 歌曲1.mp3')
 '''
 
 def showSongList():
-    os.system('clear')
-    print('\n\n=====================================')
+    print('\n============================================================================')
     print('\t\t\t\t原创')
-    print('(共有%d首)' % len(yc))
-    for idx,x in enumerate(yc):
+    print('(共%d首)' % len(yc))
+    idx = 0
+    for x in yc:
+        idx = idx + 1
         print(idx,':',x)
     print('-------------------------------------')
     print('\t\t\t\t翻唱')
     print('(共%d首)' % len(fc))
-    for idx,x in enumerate(fc):
+    for x in fc:
+        idx = idx + 1
         print(idx,':',x)
     print('-------------------------------------')
     print('\t\t\t\t伴奏')
     print('(共%d首)' % len(bz))
-    for idx,x in enumerate(bz):
-        print(idx,':',x)
-    print('=====================================\n\n')
-    print('操作说明:\tl.列表\tp.暂停\tc.继续\ts.停止\tq.退出')
+    for x in bz:
+        idx = idx + 1
+        print(idx+1,':',x)
+    print('============================================================================\n\n')
     
-def play_music(filename,url):
-    print('当前正在播放',os.path.split(filename)[1])
-    t2 = threading.Thread(target = os.system,args=('play --ignore-length -q \''+ url + '\'' + ' &>/dev/null',),name = 'PlayingMusicThread')
-    t2.start()
-    return t2
+def play_music(filename,url,idx):
+    os.system('clear')
+    print('Now Playing',os.path.split(filename)[1])
+    print('Current Index is ' + str(idx+1) + '.')
+    return os.system('play --ignore-length \''+ url + '\'')
 
-idx = 0
-circle = False
-
-def circlePlayMusic():
-    global circle
-    while circle:
-        global idx
-        filename,downloadUrl = downloadSong(idx)
-        time.sleep(1)
-        print('当前正在播放',os.path.split(filename)[1])
-        # Block until the next song, circlePlayMusic itself is a thread
-        os.system('play --ignore-length -q \''+ downloadUrl + '\'' + ' &>/dev/null')
-        idx = (idx + 1) % len(fc)
+# Change into Single Thread to Circle Music(aka. cancel operates)
+def circlePlayMusic(idx):
+    filename,downloadUrl = downloadSong(idx)
+    time.sleep(1)
+    return play_music(filename,downloadUrl,idx)
         
 
-
-
+def quit(signum,frame):
+    os.system('clear')
+    print('Bye~')
+    sys.exit(0)
 
 if __name__ == '__main__':
+    signal.signal(signal.SIGINT,quit)
+    signal.signal(signal.SIGTERM,quit)
+    os.system('clear')
     update = False
+    circle = False
+    idx = 0
     if len(sys.argv) > 1 and sys.argv[1] == 'update':
         update = True
+    print('================================================================================')
     if login5sing(update):
-        print(time.strftime("%Y年%m月%d日 %H:%M:%S",time.localtime()))
+        print('================================================================================')
+        print('\n'+time.strftime("%Y年%m月%d日 %H:%M:%S",time.localtime()) + '\n')
     singerInfo = searchSinger()
     singerID,singerName = displaySingerInfo(singerInfo)
-    #fetchHomePage(singerID)
+    fetchHomePage(singerID)
     getAllSongs(singerID)
     showSongList()
-    
     while True:
         leave = False
         while not leave:
             try:
                 if not circle:
-                    idx = int(input('请输入要听的歌的标号(默认是翻唱): '))
+                    idx = int(input('播放: '))
                     if idx == -1:
-                        print('循环播放...')
+                        print('循环播放中...')
                         circle = True
-                        idx = 0
-                    filename,downloadUrl = downloadSong(idx)
-                    time.sleep(1)
-                    nowMusic = play_music(filename,downloadUrl)
+                        idx = random.randint(1,len(songslist))
+                        print('Random Start Point @',idx)
+                    idx = idx - 1
             except ValueError as e:
                 print('请输入正确的值!')
             else:
                 leave = True
-       
-        #print('操作说明:\tl.列表\tp.暂停\tc.继续\ts.停止\tq.退出')
-        
         if circle:
-            t3 = threading.Thread(target = circlePlayMusic,name = "ListeningMusicEndThread")
-            t3.start()
-        while True:
-            opt = getch.getch()
-            if opt == 'l':
-                showSongList()
-            elif opt == 'p':
-                os.system("kill -19 `pidof play` &>/dev/null")
-            elif opt == 'c':
-                os.system('kill -18 `pidof play` &>/dev/null')
-            elif opt == 's':
-                os.system("kill -2 `pidof play` &>/dev/null")
-                circle = False
-                break
-            elif opt == 'q':
-                os.system("kill -2 `pidof play` &>/dev/null")
-                os._exit(0)
+            for idx in range(idx,len(songslist)):
+                circlePlayMusic(idx)
+        else:
+            circlePlayMusic(idx)
+      
+        
 
      
             
