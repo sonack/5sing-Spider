@@ -57,8 +57,8 @@ def login5sing(update):
         print('\n登陆中...')
         loginURL = 'http://5sing.kugou.com/login/'
         login_data = {}
-        login_data['txtUserName'] = '18245035112'
-        login_data['txtPassword'] = '5singbofangqi'
+        login_data['txtUserName'] = 'UserName'
+        login_data['txtPassword'] = 'PassWord'
         r = sess.post(loginURL,data=login_data)
         if r:
             with open('cookies.dat','wb') as f:
@@ -304,7 +304,7 @@ if __name__ == '__main__':
         print('\n'+time.strftime("%Y年%m月%d日 %H:%M:%S",time.localtime()) + '\n')
     singerInfo = searchSinger()
     singerID,singerName = displaySingerInfo(singerInfo)
-    fetchHomePage(singerID)
+    #fetchHomePage(singerID)
     getAllSongs(singerID)
     showSongList()
     while True:
