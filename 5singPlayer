@@ -55,10 +55,14 @@ sess.headers = headers
 def login5sing(update):
     if update:
         print('\n登陆中...')
-        loginURL = 'http://5sing.kugou.com/login/'
+        #loginURL = 'http://5sing.kugou.com/login/'
+        loginURL = 'http://5sing.kugou.com/m/login.html'
         login_data = {}
-        login_data['txtUserName'] = 'UserName'
-        login_data['txtPassword'] = 'PassWord'
+        #login_data['txtUserName'] = '18245035112'
+        #login_data['txtPassword'] = '5singbofangqi'
+        login_data['name'] = '18245035112'
+        login_data['pwd'] = '5singbofangqi'
+        login_data['remember'] = 'yes'
         r = sess.post(loginURL,data=login_data)
         if r:
             with open('cookies.dat','wb') as f:
@@ -96,7 +100,7 @@ def getDownloadPath(chooseID):
         os.makedirs(position)
     filePath = os.path.join(position,songslist[chooseID].name)+'.mp3'
     return filePath
-
+'''
 def getInfoDict(songID,songType):
     data = {}
     data['songid'] = str(songID)
@@ -108,12 +112,21 @@ def getInfoDict(songID,songType):
     #print('jsonData',jsonData)
     infoDict = json.loads(jsonData)
     return infoDict
+'''
+def getSongInfo(songID,songType):
+    getSongUrl = 'http://mobileapi.5sing.kugou.com/song/getSongUrl'
+    params = {}
+    params['songid'] = songID
+    params['songtype'] = songType
+    res = sess.get(getSongUrl,params = params)
+    return json.loads(res.content.decode('UTF8'))['data']
 
+'''
 def getDownloadURL(chooseID):
     ID = songslist[chooseID].ID
     TY = songslist[chooseID].TY
     return getInfoDict(ID,TY)['data']['url']
-
+'''
 
 def downloadSongMain(downloadUrl,filename):
     try:
@@ -123,15 +136,18 @@ def downloadSongMain(downloadUrl,filename):
 
 def downloadSong(chooseID):
     filename = getDownloadPath(chooseID)
-    downloadUrl = getDownloadURL(chooseID)
-    if not os.path.exists(filename):
+    songInfo = getSongInfo(songslist[chooseID].ID,songslist[chooseID].TY)
+    songSize = songInfo['sqsize']
+    downloadUrl = songInfo['squrl']
+    if (not os.path.exists(filename)) or (os.path.getsize(filename) < songSize):
         try:    
             print('正在缓存',downloadUrl,'...')
             t = threading.Thread(target=downloadSongMain,args = (downloadUrl,filename),name='DownloadThread')
             t.start()
+            return filename,downloadUrl
         except Exception as e:
             print('下载出错...')
-    return filename,downloadUrl
+    return filename,filename
 
 def searchSinger():
     print('================================================================================')
@@ -194,7 +210,7 @@ def fetchHomePage(ID):
     #r = sess.get(url)
     #bsObj = BeautifulSoup(r.content)
     os.system('google-chrome ' + url)
-
+'''
 def getSongsByUrl(url):
     html = sess.get(url)
     bsObj = BeautifulSoup(html.content)
@@ -207,11 +223,11 @@ def getSongsByUrl(url):
         r = re.match(r'http://5sing.kugou.com/(\w+)/(\d+).html',href)
         songaddr = r.groups()
         if songaddr[0] == 'yc':
-            yc.append(Song(songName,songaddr[1],rsType[songaddr[0]]))
+            yc.append(Song(songName,songaddr[1],songaddr[0]))
         elif songaddr[0] == 'fc':
-            fc.append(Song(songName,songaddr[1],rsType[songaddr[0]]))
+            fc.append(Song(songName,songaddr[1],songaddr[0]))
         elif songaddr[0] == 'bz':
-            bz.append(Song(songName,songaddr[1],rsType[songaddr[0]]))
+            bz.append(Song(songName,songaddr[1],songaddr[0]))
         #print(getInfoDict(songaddr[1],rsType[songaddr[0]])
 
 def processList(singerID,i):
@@ -232,12 +248,28 @@ def processList(singerID,i):
         for page in range(pageNum):
             url = 'http://5sing.kugou.com/' + singerID + '/' + sType[i] + '/' + str(page+1) + '.html'
             getSongsByUrl(url)
+'''
+def processListByAPI(singerID,i):
+    getUserSongsUrl = 'http://mobileapi.5sing.kugou.com/song/user'
+    params = {}
+    params['pagesize'] = -1
+    params['userid'] = singerID
+    params['songtype'] = sType[i]
+    res = sess.get(getUserSongsUrl,params = params)
+    allSongs = json.loads(res.content.decode('UTF8'))['data']
+    for song in allSongs:
+        if song['SK'] == 'yc':
+            yc.append(Song(song['SN'].strip(),song['ID'],'yc'))
+        elif song['SK'] == 'fc':
+            fc.append(Song(song['SN'].strip(),song['ID'],'fc'))
+        elif song['SK'] == 'bz':
+            bz.append(Song(song['SN'].strip(),song['ID'],'bz'))
 
 def getAllSongs(ID):
     global songslist
     print('正在获取歌曲......\n')
     for i in range(3):
-        processList(ID,i)
+        processListByAPI(ID,i)
     songslist = yc + fc + bz
     print('\n\t\t共' + str(len(songslist)) + '首')
 
@@ -268,27 +300,63 @@ def showSongList():
     print('(共%d首)' % len(bz))
     for x in bz:
         idx = idx + 1
-        print(idx+1,':',x)
+        print(idx,':',x)
     print('============================================================================\n\n')
     
 def play_music(filename,url,idx):
-    os.system('clear')
-    print('Now Playing',os.path.split(filename)[1])
-    print('Current Index is ' + str(idx+1) + '.')
-    return os.system('play --ignore-length \''+ url + '\'')
+    displayComments(idx)
+    print('当前位置' + str(idx+1) + '.')
+    print('正在播放',os.path.split(filename)[1])
+    getLyric(idx)
+    return os.system('play  -q \''+ url + '\'')
 
 # Change into Single Thread to Circle Music(aka. cancel operates)
 def circlePlayMusic(idx):
+    #print('IDX =',idx)
     filename,downloadUrl = downloadSong(idx)
-    time.sleep(1)
     return play_music(filename,downloadUrl,idx)
         
 
 def quit(signum,frame):
-    os.system('clear')
-    print('Bye~')
-    sys.exit(0)
+    print('\nBye~')
+    os._exit(0)
 
+def getLyric(chooseID):
+    srcUrl = 'http://5sing.kugou.com/'+ songslist[chooseID].TY + '/' + str(songslist[chooseID].ID) + '.html'
+    res = sess.get(srcUrl)
+    html = res.content.decode('UTF8')
+    lyric = re.match(r'[\s\S]*?<!--lrc-->([\s\S]*?)<!--lrc-->[\s\S]*',html).group(1)
+    lyric = br2gn(lyric)
+    lyric = re.sub('<[^<]+?>', '', lyric)
+    os.system('clear')
+    print(lyric)
+
+def displaySingleComment(comment):
+    #print(comment['createTime']+'\t'+comment['user']['NN']+'说:“',comment['content']+'~”')
+    tabs = random.randint(1,5)
+    stop = ""
+    for i in range(tabs):
+        stop += '\t'
+    stop += html.unescape(re.sub('\[p.+?\]', '', comment['user']['NN'] + ':  “' + comment['content'])) +'~”'
+    print(stop)
+
+def displayComments(chooseID):
+    songid = songslist[chooseID].ID;
+    songtype = songslist[chooseID].TY;
+    apiUrl = 'http://mobileapi.5sing.kugou.com/comments/list'
+    params = {}
+    params['rootId'] = songid
+    params['rootKind'] = songtype
+    r = sess.get(apiUrl,params =  params)
+    commentsObj = json.loads(r.content.decode('UTF8'))
+    count = commentsObj['count']
+    print('\n============================================================================\n')
+    print('评论数 ('+ str(count) + '条)\n')
+    for comment in commentsObj['data']:
+        displaySingleComment(comment['comments'][0])
+    print('\n============================================================================\n')
+
+   
 if __name__ == '__main__':
     signal.signal(signal.SIGINT,quit)
     signal.signal(signal.SIGTERM,quit)
@@ -312,13 +380,27 @@ if __name__ == '__main__':
         while not leave:
             try:
                 if not circle:
-                    idx = int(input('播放: '))
-                    if idx == -1:
+                    idx = input('播放: ')
+                    if idx == 'x':
                         print('循环播放中...')
                         circle = True
                         idx = random.randint(1,len(songslist))
                         print('Random Start Point @',idx)
-                    idx = idx - 1
+                    elif idx == 's':
+                        singerInfo = searchSinger()
+                        singerID,singerName = displaySingerInfo(singerInfo)
+                        fetchHomePage(singerID)
+                        getAllSongs(singerID)
+                        showSongList()
+                        continue
+                    elif idx == 'l':
+                        showSongList()
+                    else:
+                        idx = int(idx)
+                        if idx == 0 or abs(idx) > len(songslist):
+                            raise ValueError()
+                    if idx > 0:
+                        idx = idx - 1
             except ValueError as e:
                 print('请输入正确的值!')
             else:
