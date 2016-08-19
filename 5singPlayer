@@ -108,12 +108,12 @@ def saveImg():
         os.makedirs(position)
     suffix = os.path.splitext(imageURL)[1]
     imgPath = os.path.join(position,singerName + " 头像 " + suffix) 
-    if not os.path.exists(imgPath):
+    if not os.path.exists(imgPath) and imageURL:
         urllib.request.urlretrieve(imageURL,imgPath)
         print('头像下载成功!')
 
-def getDownloadPath(chooseID):
-    filePath = os.path.join(position,songslist[chooseID].name)+'.mp3'
+def getDownloadPath(chooseID,ext):
+    filePath = os.path.join(position,songslist[chooseID].name) + '.' + ext
     return filePath
 
 
@@ -155,17 +155,32 @@ def downloadSongMain(downloadUrl,filename):
     else:
         break
 def downloadSong(chooseID):
-    filename = getDownloadPath(chooseID)
     songInfo = getSongInfo(songslist[chooseID].ID,songslist[chooseID].TY)
+    # Quality Higher, Priority Higher 
     songSize = songInfo['sqsize']
     downloadUrl = songInfo['squrl']
-    if (not os.path.exists(filename)) or songSize - (os.path.getsize(filename) < errorAllow):
+    ext = songInfo['sqext']
+    if downloadUrl == '':
+        downloadUrl = songInfo['hqurl']
+        songSize = songInfo['hqsize']
+        ext = songInfo['hqext']
+        if downloadUrl == '':
+            downloadUrl = songInfo['lqurl']
+            songSize = songInfo['lqsize']
+            ext = songInfo['lqext']
+            if downloadUrl == '':
+                print('无法解析音乐地址!')
+    filename = getDownloadPath(chooseID,ext)
+    #print(songSize,':',os.path.getsize(filename))
+    if (not os.path.exists(filename)) or (songSize - os.path.getsize(filename)) > errorAllow:
         try:
             t = threading.Thread(target=downloadSongMain,args = (downloadUrl,filename),name='DownloadThread')
             t.start()
+            print('缓存中...')
             return filename,downloadUrl
         except Exception as e:
             print('下载出错...')
+    print('已缓存')
     return filename,filename
 
 def loadCollection():
@@ -195,8 +210,10 @@ def inputSinger():
     elif singerName[0] == '%':
         return 2,singerName[1:]
     try:
-        singerIdx = int(singerName) - 1
-        if singerIdx < len(singerNames):
+        singerIdx = int(singerName)
+        if abs(singerIdx) <= len(singerNames):
+            if singerIdx > 0:
+                singerIdx = singerIdx - 1
             singerName = singerNames[singerIdx]['name'] if singerNames[singerIdx]['flag'] == 1 else '%' + singerNames[singerIdx]['id']
             if singerName[0] == '%':
                 return 2,singerName[1:]
@@ -244,7 +261,7 @@ def displaySingerInfo(searchRes):
         print('已关注')
     else:
         print('未关注')
-    print('描述:\n\t%s' % br2gn(html.unescape(description)))
+    print('描述:\n\t%s' % re.sub('\[.+?\]|<[^<]+?>', '', br2gn(html.unescape(description))))
     print('\n\n============================================================================\n')
     return ID,name
 
@@ -352,10 +369,10 @@ def showSongList():
     
 def play_music(filename,url,idx):
     displayComments(idx)
-    print('当前位置' + str(idx+1) + '.')
-    print('正在播放',os.path.split(filename)[1])
     getLyric(idx)
-    return os.system('play  -q \''+ url + '\'')
+    print('当前位置 ' + str(idx+1) + '.')
+    print('正在播放',os.path.split(filename)[1] + ' ... ',end='',flush = True)
+    return os.system('mplayer -really-quiet \''+ url + '\'')
 
 # Change into Single Thread to Circle Music(aka. cancel operates)
 def circlePlayMusic(idx):
@@ -372,11 +389,28 @@ def getLyric(chooseID):
     srcUrl = 'http://5sing.kugou.com/'+ songslist[chooseID].TY + '/' + str(songslist[chooseID].ID) + '.html'
     res = sess.get(srcUrl)
     content = res.content.decode('UTF8')
-    lyric = re.match(r'[\s\S]*?<!--lrc-->([\s\S]*?)<!--lrc-->[\s\S]*',content).group(1)
-    lyric = br2gn(html.unescape(lyric)).strip()
-    lyric = re.sub('\[.+?\]|<[^<]+?>', '', lyric)
+    lyric = re.match(r'[\s\S]*?<!--lrc-->([\s\S]*?)<!--lrc-->[\s\S]*',content)
+    if lyric:
+        lyric = lyric.group(1)
+        lyric = br2gn(html.unescape(lyric)).strip()
+        lyric = re.sub('\[.+?\]|<[^<]+?>', '', lyric)
+    inspire = re.match(r'[\s\S]*?<!--inspiration-->([\s\S]*?)<!--inspiration-->[\s\S]*',content)
+    if inspire:
+        inspire = inspire.group(1)
+        inspire = br2gn(html.unescape(inspire)).strip()
+        inspire = re.sub('\[.+?\]|<[^<]+?>', '', inspire)
     os.system('clear')
-    print('\t'+lyric)
+    print('灵感\n\t')
+    if not inspire:
+        print('\t无')
+    else:
+        print('\t'+inspire)
+    print('\n歌词\n\t')
+    if not lyric:
+        print('\t无')
+    else:
+        print('\t'+lyric)
+    print('\n============================================================================\n')
 
 def displaySingleComment(comment):
     #print(comment['createTime']+'\t'+comment['user']['NN']+'说:“',comment['content']+'~”')
@@ -418,7 +452,7 @@ def displayComments(chooseID):
     print('\n============================================================================\n')
 
 def selectSinger():
-    global singerNames,singerName,singerID
+    global singerNames,singerName,singerID,idx
     status,NameOrID = inputSinger()
     if status == 1:
         singerID,singerName = displaySingerInfo(searchSinger(NameOrID))
@@ -439,7 +473,7 @@ def openInBrowser(idx):
     songID = songslist[idx].ID
     songType = songslist[idx].TY
     targetUrl = 'http://5sing.kugou.com/' + songType + '/' + str(songID) + '.html'
-    os.system('google-chrome -app='+targetUrl)
+    os.system('google-chrome -app=' + targetUrl + ' > /dev/null 2>&1 &')
 
 if __name__ == '__main__':
     imageURL = ""
@@ -448,7 +482,6 @@ if __name__ == '__main__':
     os.system('clear')
     update = False
     circle = False
-    idx = 0
     if len(sys.argv) > 1 and sys.argv[1] == 'update':
         update = True
     print('================================================================================')
@@ -456,6 +489,7 @@ if __name__ == '__main__':
         print('================================================================================')
         print('\n'+time.strftime("%Y年%m月%d日 %H:%M:%S",time.localtime()) + '\n')
     loadCollection()
+    idx = -1
     selectSinger()
     while True:
         leave = False
@@ -463,8 +497,8 @@ if __name__ == '__main__':
             try:
                 if not circle:
                     oldidx = idx
-                    idx = input('\n播放: ')
-                    if idx[0] == 'x':
+                    idx = input('\n>>> ')
+                    if len(idx) > 0 and idx[0] == 'x':
                         print('循环播放中...')
                         circle = True
                         if len(idx) == 1:
@@ -475,6 +509,7 @@ if __name__ == '__main__':
                             print('Specific Start Point @',idx)
                             idx = idx - 1
                     elif idx == 's':
+                        idx = -1
                         selectSinger()
                         continue
                     elif idx == 'l':
@@ -483,7 +518,7 @@ if __name__ == '__main__':
                     elif idx == 'o':
                         openInBrowser(oldidx)
                         continue
-                    elif idx == 'n':
+                    elif idx == 'n' or idx == '':
                           idx = (oldidx + 1) % len(songslist)
                     elif idx == 'p':
                           idx = (oldidx - 1 + len(songslist)) % len(songslist)
