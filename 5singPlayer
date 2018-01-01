@@ -232,14 +232,18 @@ def searchSinger(singerName):
     html = r.content.decode('utf-8')
     rep = r"[\s\S]*?matchInfo = '([\s\S]*?)';[\s\S]*";
     m = re.match(rep,html)
-    jsonData = m.group(1);
-    searchRes = json.loads(str(jsonData))
+    jsonData = m.group(1)
+    try:
+        searchRes = json.loads(str(jsonData))
+    except Exception as e:
+        print("查无此歌手,请使用ID指定!")
+        os._exit(-1)
     return searchRes
 
-def displaySingerInfo(searchRes):
+def displaySingerInfo(searchRes, searchName):
     global imageURL
     imageURL = searchRes['pictureUrl']
-    name = searchRes['originalName']
+    name = searchRes.get('originalName',searchName)
     city = searchRes['city']
     style = searchRes['style']
     fans = searchRes['fans']
@@ -467,7 +471,7 @@ def selectSinger():
     global singerNames,singerName,singerID,idx
     status,NameOrID = inputSinger()
     if status == 1:
-        singerID,singerName = displaySingerInfo(searchSinger(NameOrID))
+        singerID,singerName = displaySingerInfo(searchSinger(NameOrID), NameOrID)
     elif status == 2:
         singerID = NameOrID
         singerName = getSingerName(singerID)
