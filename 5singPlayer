@@ -298,7 +298,7 @@ def getSongsByUrl(url):
         #print(getInfoDict(songaddr[1],rsType[songaddr[0]])
 
 def processList(singerID,i):
-    initUrl = 'http://5sing.kugou.com/'+ singerID + '/' + sType[i] + '/1.html'
+    initUrl = 'http://5sing.kugou.com/'+ str(singerID) + '/' + sType[i] + '/1.html'
     html = sess.get(initUrl)
     bsObj = BeautifulSoup(html.content)
     total = bsObj.find('span', {'class':'song_tit_total'}).string
@@ -316,21 +316,29 @@ def processList(singerID,i):
             url = 'http://5sing.kugou.com/' + singerID + '/' + sType[i] + '/' + str(page+1) + '.html'
             getSongsByUrl(url)
 '''
+
+
 def processListByAPI(singerID,i):
     getUserSongsUrl = 'http://mobileapi.5sing.kugou.com/song/user'
     params = {}
-    params['pagesize'] = -1
-    params['userid'] = singerID
-    params['songtype'] = sType[i]
-    res = sess.get(getUserSongsUrl,params = params)
-    allSongs = json.loads(res.content.decode('UTF8'))['data']
-    for song in allSongs:
-        if song['SK'] == 'yc':
-            yc.append(Song(song['SN'].strip(),song['ID'],'yc'))
-        elif song['SK'] == 'fc':
-            fc.append(Song(song['SN'].strip(),song['ID'],'fc'))
-        elif song['SK'] == 'bz':
-            bz.append(Song(song['SN'].strip(),song['ID'],'bz'))
+    # params['pagesize'] = 
+    index = 1
+    while True:
+        params['pageindex'] = index
+        index += 1
+        params['userid'] = singerID
+        params['songtype'] = sType[i]
+        res = sess.get(getUserSongsUrl,params = params)
+        allSongs = json.loads(res.content.decode('UTF8'))['data']
+        if len(allSongs) == 0:
+            break
+        for song in allSongs:
+            if song['SK'] == 'yc':
+                yc.append(Song(song['SN'].strip(),song['ID'],'yc'))
+            elif song['SK'] == 'fc':
+                fc.append(Song(song['SN'].strip(),song['ID'],'fc'))
+            elif song['SK'] == 'bz':
+                bz.append(Song(song['SN'].strip(),song['ID'],'bz'))
 
 def getAllSongs(ID):
     global songslist,yc,fc,bz
@@ -340,6 +348,7 @@ def getAllSongs(ID):
     print('正在获取歌曲......\n')
     for i in range(3):
         processListByAPI(ID,i)
+        # processList(ID,i)
     songslist = yc + fc + bz
     print('\n\t\t共' + str(len(songslist)) + '首')
 
