@@ -109,7 +109,7 @@ def saveImg():
         print('创建文件夹',position,'!')
         os.makedirs(position)
     suffix = os.path.splitext(imageURL)[1]
-    imgPath = os.path.join(position,singerName + " 头像 " + suffix) 
+    imgPath = os.path.join(position,singerName + " 头像 " + suffix)
     if not os.path.exists(imgPath) and imageURL:
         urllib.request.urlretrieve(imageURL,imgPath)
         print('头像下载成功!')
@@ -158,7 +158,7 @@ def downloadSongMain(downloadUrl,filename):
         break
 def downloadSong(chooseID):
     songInfo = getSongInfo(songslist[chooseID].ID,songslist[chooseID].TY)
-    # Quality Higher, Priority Higher 
+    # Quality Higher, Priority Higher
     songSize = songInfo['sqsize']
     downloadUrl = songInfo['squrl']
     ext = songInfo['sqext']
@@ -192,7 +192,7 @@ def loadCollection():
             singerNames = pickle.load(f)
     except FileNotFoundError as e:
         print('未找到歌手信息文件!')
-    
+
 def saveCollection():
     with open('/home/snk/bin/singers.dat','wb') as f:
         pickle.dump(singerNames,f)
@@ -206,7 +206,11 @@ def inputSinger():
     else:
         for i,x in enumerate(singerNames):
             print(i+1,":",x['name'])
-    singerName = input('\n请输入歌手名称或ID号(以%开头):\t')
+    try:
+        singerName = input('\n请输入歌手名称或ID号(以%开头):\t')
+    except EOFError:
+        quit(None,None)
+    
     if singerName == "":
         singerName = '1'
     elif singerName[0] == '%':
@@ -220,7 +224,7 @@ def inputSinger():
             if singerName[0] == '%':
                 return 2,singerName[1:]
     except Exception as e:
-        pass 
+        pass
     return 1,singerName
 
 def searchSinger(singerName):
@@ -321,7 +325,7 @@ def processList(singerID,i):
 def processListByAPI(singerID,i):
     getUserSongsUrl = 'http://mobileapi.5sing.kugou.com/song/user'
     params = {}
-    # params['pagesize'] = 
+    # params['pagesize'] =
     index = 1
     while True:
         params['pageindex'] = index
@@ -381,7 +385,7 @@ def showSongList():
         idx = idx + 1
         print(idx,':',x)
     print('============================================================================\n\n')
-    
+
 def play_music(filename,url,idx):
     # 取消注释，即可打开评论和歌词
     try:
@@ -398,13 +402,13 @@ def play_music(filename,url,idx):
         if status or endTime - startTime > limitTime:
             break
 
-    
+
 # Change into Single Thread to Circle Music(aka. cancel operates)
 def circlePlayMusic(idx):
     #print('IDX =',idx)
     filename,downloadUrl = downloadSong(idx)
     play_music(filename,downloadUrl,idx)
-        
+
 
 def quit(signum,frame):
     print('\nBye~')
@@ -505,6 +509,7 @@ if __name__ == '__main__':
     imageURL = ""
     signal.signal(signal.SIGINT,quit)
     signal.signal(signal.SIGTERM,quit)
+
     os.system('clear')
     update = False
     circle = False
@@ -523,7 +528,10 @@ if __name__ == '__main__':
             try:
                 if not circle:
                     oldidx = idx
-                    idx = input('\n>>> ')
+                    try:
+                        idx = input('\n>>> ')
+                    except EOFError:
+                        quit(None,None)
                     if len(idx) > 0 and idx[0] == 'x':
                         print('循环播放中...')
                         circle = True
@@ -564,6 +572,6 @@ if __name__ == '__main__':
                 circlePlayMusic(idx)
         else:
             circlePlayMusic(idx)
-            
-        
+
+
 
