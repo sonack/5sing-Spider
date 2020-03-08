@@ -16,7 +16,17 @@ import math
 import sys
 import re
 import os
+from os.path import expanduser
+import pdb
 
+config_dir = expanduser('~/.config/5singPlayer')
+# pdb.set_trace()
+if not os.path.exists(config_dir):
+    print('mkdirs {}'.format(config_dir))
+    os.makedirs(config_dir)
+
+cookies_cfg = os.path.join(config_dir, 'cookies.dat')
+singer_cfg = os.path.join(config_dir, 'singers.dat')
 sType = {}
 sType[0] = 'yc'
 sType[1] = 'fc'
@@ -41,11 +51,11 @@ singerNames.append({'name':'封茗囧菌','flag':1})
 singerNames.append({'name':'Midaho','flag':1})
 '''
 
-directory = '/home/snk/Music/5sing'
+directory = expanduser('~/Music/5sing')
 position = directory
 singerName = "未命名"
 useCacheList = True
-CacheName="/home/snk/.5SING_CACHE"
+CacheName= os.path.join(config_dir, ".5SING_CACHE")
 CacheObj = {}
 UPDATE_INTERVAL = 24 * 60 * 60  # 1 day time in seconds
 
@@ -62,7 +72,7 @@ headers = {
 sess.headers = headers
 
 def login5sing(update):
-    if update:
+    if update or (not os.path.exists(cookies_cfg)):
         print('\n登陆中...')
         #loginURL = 'http://5sing.kugou.com/login/'
         loginURL = 'http://5sing.kugou.com/m/login.html'
@@ -74,12 +84,12 @@ def login5sing(update):
         login_data['remember'] = 'yes'
         r = sess.post(loginURL,data=login_data)
         if r:
-            with open('/home/snk/bin/cookies.dat','wb') as f:
+            with open(cookies_cfg,'wb') as f:
                 pickle.dump(sess.cookies,f)
             print('\n更新Cookie成功!\n')
         return r
     else:
-        with open('/home/snk/bin/cookies.dat','rb') as f:
+        with open(cookies_cfg,'rb') as f:
             sess.cookies = pickle.load(f)
         if sess.cookies:
                 print('\n读取Cookie成功!\n')
@@ -177,27 +187,27 @@ def downloadSong(chooseID):
                 print('无法解析音乐地址!')
     filename = getDownloadPath(chooseID,ext)
     #print(songSize,':',os.path.getsize(filename))
-    if (not os.path.exists(filename)) or (songSize - os.path.getsize(filename)) > errorAllow:
+    if (not os.path.exists(filename)) or (int(songSize) - os.path.getsize(filename)) > errorAllow:
         try:
             t = threading.Thread(target=downloadSongMain,args = (downloadUrl,filename),name='DownloadThread')
             t.start()
-            print('缓存中...')
+            print('{}缓存中...'.format(filename))
             return filename,downloadUrl
         except Exception as e:
-            print('下载出错...')
-    print('已缓存')
+            print('{}下载出错...'.format(filename))
+    print('{}已缓存'.format(filename))
     return filename,filename
 
 def loadCollection():
     global singerNames
     try:
-        with open('/home/snk/bin/singers.dat','rb') as f:
+        with open(singer_cfg,'rb') as f:
             singerNames = pickle.load(f)
     except FileNotFoundError as e:
         print('未找到歌手信息文件!')
 
 def saveCollection():
-    with open('/home/snk/bin/singers.dat','wb') as f:
+    with open(singer_cfg,'wb') as f:
         pickle.dump(singerNames,f)
 
 def inputSinger():
@@ -264,7 +274,7 @@ def displaySingerInfo(searchRes, searchName):
     print('\n============================================================================\n')
     print('歌手信息如下:')
     print('姓名:\t%s' % name)
-    print('性别:\t%s' % '女' if sex else 男)
+    print('性别:\t%s' % '女' if sex else '男')
     print('城市:\t%s' % city)
     print('风格:\t%s' % style)
     print('粉丝数:\t%s' % fans)
@@ -325,7 +335,7 @@ def processList(singerID,i):
 '''
 def WriteCache(cache_obj):
     print ('写入缓存对象...')
-    print (cache_obj)
+    # print (cache_obj)
     with open(CacheName,'wb') as f:
         pickle.dump(cache_obj, f)
 
@@ -405,6 +415,7 @@ os.system('play 歌曲1.mp3')
 '''
 
 def showSongList():
+    global bz_start, bz_end
     print('\n============================================================================')
     print('\t\t\t\t原创')
     print('(共%d首)' % len(yc))
@@ -421,9 +432,11 @@ def showSongList():
     print('-------------------------------------')
     print('\t\t\t\t伴奏')
     print('(共%d首)' % len(bz))
+    bz_start = idx
     for x in bz:
         idx = idx + 1
         print(idx,':',x)
+    bz_end = idx
     print('============================================================================\n\n')
 
 def play_music(filename,url,idx):
@@ -442,12 +455,18 @@ def play_music(filename,url,idx):
         if status or endTime - startTime > limitTime:
             break
 
+def download_all_accompany():
+    pdb.set_trace()
 
 # Change into Single Thread to Circle Music(aka. cancel operates)
 def circlePlayMusic(idx):
     #print('IDX =',idx)
-    filename,downloadUrl = downloadSong(idx)
-    play_music(filename,downloadUrl,idx)
+    for idx in range(bz_start, bz_end):
+        filename,downloadUrl = downloadSong(idx)
+    else:
+        print('无伴奏')
+        return
+    # play_music(filename,downloadUrl,idx)
 
 
 def quit(signum,frame):
@@ -594,9 +613,11 @@ if __name__ == '__main__':
                         openInBrowser(oldidx)
                         continue
                     elif idx == 'n' or idx == '':
-                          idx = (oldidx + 1) % len(songslist)
+                        idx = (oldidx + 1) % len(songslist)
                     elif idx == 'p':
-                          idx = (oldidx - 1 + len(songslist)) % len(songslist)
+                        idx = (oldidx - 1 + len(songslist)) % len(songslist)
+                    elif idx == 'd':
+                        break
                     else:
                         idx = int(idx)
                         if idx == 0 or abs(idx) > len(songslist):
