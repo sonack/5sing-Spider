@@ -177,20 +177,27 @@ def getSongInfo(songID,songType):
     params['songid'] = songID
     params['songtype'] = songType
     res = sess.get(getSongUrl,params = params)
+    # pdb.set_trace()
+    res_dict = json.loads(res.content.decode('UTF8'))
+    if not res_dict['success']:
+        return None
     return json.loads(res.content.decode('UTF8'))['data']
 
 
 def downloadSongMain(downloadUrl,filename):
   while True:
     try:
-    
         urllib.request.urlretrieve(downloadUrl,filename, MyProgressBar())
     except Exception as e:
         continue
     else:
         break
+
 def downloadSong(chooseID):
     songInfo = getSongInfo(songslist[chooseID].ID,songslist[chooseID].TY)
+    if songInfo is None:
+        print('{}无法下载，跳过！'.format(songslist[chooseID].name))
+        return None, None
     # Quality Higher, Priority Higher
     songSize = songInfo['sqsize']
     downloadUrl = songInfo['squrl']
@@ -466,6 +473,7 @@ def showSongList():
     print('\t\t\t\t伴奏')
     print('(共%d首)' % len(bz))
     bz_start = idx
+    # bz_start = 45
     for x in bz:
         idx = idx + 1
         print(idx,':',x)
@@ -487,9 +495,6 @@ def play_music(filename,url,idx):
         endTime = time.time()
         if status or endTime - startTime > limitTime:
             break
-
-def download_all_accompany():
-    pdb.set_trace()
 
 # Change into Single Thread to Circle Music(aka. cancel operates)
 def circlePlayMusic(idx):
