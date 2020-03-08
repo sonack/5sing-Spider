@@ -207,6 +207,7 @@ def downloadSong(chooseID):
                 print('无法解析音乐地址!')
     filename = getDownloadPath(chooseID,ext)
     fn, fn_ext = osp.splitext(osp.basename(filename))
+    # print(songslist[chooseID].ID)
     orig_singer = getLyric(chooseID)
     new_fn = '{}--{}'.format(fn, orig_singer)
     filename = filename.replace(fn, new_fn)
@@ -222,10 +223,10 @@ def downloadSong(chooseID):
             print('{}下载中...'.format(new_fn))
             t.join()
             print('{}下载完成!\n'.format(new_fn))
-
-            return filename,downloadUrl
         except Exception as e:
             print('{}下载出错...\n'.format(filename))
+    else:
+        print('{}已下载!'.format(new_fn))
     # return filename,filename
     return filename,downloadUrl
 
