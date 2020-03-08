@@ -16,8 +16,27 @@ import math
 import sys
 import re
 import os
+import os.path as osp
 from os.path import expanduser
 import pdb
+from progressbar import *
+
+
+class MyProgressBar():
+    def __init__(self):
+        self.pbar = None
+
+    def __call__(self, block_num, block_size, total_size):
+        if not self.pbar:
+            self.pbar=progressbar.ProgressBar(maxval=total_size)
+            self.pbar.start()
+
+        downloaded = block_num * block_size
+        if downloaded < total_size:
+            self.pbar.update(downloaded)
+        else:
+            self.pbar.finish()
+
 
 config_dir = expanduser('~/.config/5singPlayer')
 # pdb.set_trace()
@@ -164,7 +183,8 @@ def getSongInfo(songID,songType):
 def downloadSongMain(downloadUrl,filename):
   while True:
     try:
-        urllib.request.urlretrieve(downloadUrl,filename)
+    
+        urllib.request.urlretrieve(downloadUrl,filename, MyProgressBar())
     except Exception as e:
         continue
     else:
@@ -186,17 +206,29 @@ def downloadSong(chooseID):
             if downloadUrl == '':
                 print('无法解析音乐地址!')
     filename = getDownloadPath(chooseID,ext)
+    fn, fn_ext = osp.splitext(osp.basename(filename))
+    orig_singer = getLyric(chooseID)
+    new_fn = '{}--{}'.format(fn, orig_singer)
+    filename = filename.replace(fn, new_fn)
+
+    # print(filename)
+    # pdb.set_trace()
     #print(songSize,':',os.path.getsize(filename))
+
     if (not os.path.exists(filename)) or (int(songSize) - os.path.getsize(filename)) > errorAllow:
         try:
             t = threading.Thread(target=downloadSongMain,args = (downloadUrl,filename),name='DownloadThread')
             t.start()
-            print('{}缓存中...'.format(filename))
+            print('{}下载中...'.format(new_fn))
+            t.join()
+            print('{}下载完成!\n'.format(new_fn))
+
             return filename,downloadUrl
         except Exception as e:
-            print('{}下载出错...'.format(filename))
-    print('{}已缓存'.format(filename))
-    return filename,filename
+            print('{}下载出错...\n'.format(filename))
+    # return filename,filename
+    return filename,downloadUrl
+
 
 def loadCollection():
     global singerNames
@@ -461,11 +493,12 @@ def download_all_accompany():
 # Change into Single Thread to Circle Music(aka. cancel operates)
 def circlePlayMusic(idx):
     #print('IDX =',idx)
-    for idx in range(bz_start, bz_end):
-        filename,downloadUrl = downloadSong(idx)
+    if bz_start >= bz_end:
+        print('无伴奏!')
     else:
-        print('无伴奏')
-        return
+        for idx in range(bz_start, bz_end):
+            filename,downloadUrl = downloadSong(idx)
+        print('下载完成!')
     # play_music(filename,downloadUrl,idx)
 
 
@@ -476,17 +509,25 @@ def quit(signum,frame):
 def getLyric(chooseID):
     srcUrl = 'http://5sing.kugou.com/'+ songslist[chooseID].TY + '/' + str(songslist[chooseID].ID) + '.html'
     res = sess.get(srcUrl)
-    content = res.content.decode('UTF8')
+    # content = res.content.decode('UTF8')
+
+    bsObj = BeautifulSoup(res.content, "lxml")
+    orig_singer = bsObj.find_all("ul", class_ = "mb15")
+    if len(orig_singer) > 0:
+        orig_singer = orig_singer[0].li.a.string.strip()
+    '''
     lyric = re.match(r'[\s\S]*?<!--lrc-->([\s\S]*?)<!--lrc-->[\s\S]*',content)
     if lyric:
         lyric = lyric.group(1)
         lyric = br2gn(html.unescape(lyric)).strip()
         lyric = re.sub('\[.+?\]|<[^<]+?>', '', lyric)
+    # pdb.set_trace()    
     inspire = re.match(r'[\s\S]*?<!--inspiration-->([\s\S]*?)<!--inspiration-->[\s\S]*',content)
     if inspire:
         inspire = inspire.group(1)
         inspire = br2gn(html.unescape(inspire)).strip()
         inspire = re.sub('\[.+?\]|<[^<]+?>', '', inspire)
+    pdb.set_trace()
     os.system('clear')
     print('灵感\n\t')
     if not inspire:
@@ -499,6 +540,8 @@ def getLyric(chooseID):
     else:
         print('\t'+lyric)
     print('\n============================================================================\n')
+    '''
+    return orig_singer
 
 def displaySingleComment(comment):
     #print(comment['createTime']+'\t'+comment['user']['NN']+'说:“',comment['content']+'~”')
