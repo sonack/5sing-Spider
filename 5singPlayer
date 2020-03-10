@@ -147,7 +147,7 @@ def saveImg():
         print('头像下载成功!')
 
 def getDownloadPath(chooseID,ext):
-    filePath = os.path.join(position,songslist[chooseID].name.replace('/','-')) + '.' + ext
+    filePath = os.path.join(position,songslist[chooseID].name.replace('/','-').replace('／','-')) + '.' + ext
     return filePath
 
 
@@ -190,6 +190,7 @@ def downloadSongMain(downloadUrl,filename):
         urllib.request.urlretrieve(downloadUrl,filename, MyProgressBar())
     except Exception as e:
         print(e)
+        break
     else:
         break
 
@@ -217,7 +218,7 @@ def downloadSong(chooseID):
     fn, fn_ext = osp.splitext(osp.basename(filename))
     # print(songslist[chooseID].ID)
     orig_singer = getLyric(chooseID)
-    new_fn = '{}--{}'.format(fn, orig_singer)
+    new_fn = '{}--{}'.format(fn, orig_singer.replace('/','-').replace('／','-'))
     filename = filename.replace(fn, new_fn)
 
     # print(filename)
@@ -234,7 +235,7 @@ def downloadSong(chooseID):
         except Exception as e:
             print('{}下载出错...\n'.format(filename))
     else:
-        print('{}已下载!'.format(new_fn))
+        print('{}已下载!\n'.format(new_fn))
     # return filename,filename
     return filename,downloadUrl
 
@@ -474,7 +475,7 @@ def showSongList():
     print('\t\t\t\t伴奏')
     print('(共%d首)' % len(bz))
     bz_start = idx
-    # bz_start = 27
+    # bz_start = 287
     for x in bz:
         idx = idx + 1
         print(idx,':',x)
