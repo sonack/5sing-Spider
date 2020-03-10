@@ -147,7 +147,7 @@ def saveImg():
         print('头像下载成功!')
 
 def getDownloadPath(chooseID,ext):
-    filePath = os.path.join(position,songslist[chooseID].name) + '.' + ext
+    filePath = os.path.join(position,songslist[chooseID].name.replace('/','-')) + '.' + ext
     return filePath
 
 
@@ -189,12 +189,13 @@ def downloadSongMain(downloadUrl,filename):
     try:
         urllib.request.urlretrieve(downloadUrl,filename, MyProgressBar())
     except Exception as e:
-        continue
+        print(e)
     else:
         break
 
 def downloadSong(chooseID):
     songInfo = getSongInfo(songslist[chooseID].ID,songslist[chooseID].TY)
+    # pdb.set_trace()
     if songInfo is None:
         print('{}无法下载，跳过！'.format(songslist[chooseID].name))
         return None, None
@@ -473,7 +474,7 @@ def showSongList():
     print('\t\t\t\t伴奏')
     print('(共%d首)' % len(bz))
     bz_start = idx
-    # bz_start = 45
+    # bz_start = 27
     for x in bz:
         idx = idx + 1
         print(idx,':',x)
