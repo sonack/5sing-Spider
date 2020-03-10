@@ -20,7 +20,7 @@ import os.path as osp
 from os.path import expanduser
 import pdb
 from progressbar import *
-
+from termcolor import cprint
 
 class MyProgressBar():
     def __init__(self):
@@ -105,13 +105,13 @@ def login5sing(update):
         if r:
             with open(cookies_cfg,'wb') as f:
                 pickle.dump(sess.cookies,f)
-            print('\n更新Cookie成功!\n')
+            cprint('\n更新Cookie成功!\n', 'green')
         return r
     else:
         with open(cookies_cfg,'rb') as f:
             sess.cookies = pickle.load(f)
         if sess.cookies:
-                print('\n读取Cookie成功!\n')
+                cprint('\n读取Cookie成功!\n', 'green')
         return sess.cookies
 
 def br2gn(s):
@@ -144,10 +144,10 @@ def saveImg():
     imgPath = os.path.join(position,singerName + " 头像 " + suffix)
     if not os.path.exists(imgPath) and imageURL:
         urllib.request.urlretrieve(imageURL,imgPath)
-        print('头像下载成功!')
+        cprint('头像下载成功!', 'green')
 
 def getDownloadPath(chooseID,ext):
-    filePath = os.path.join(position,songslist[chooseID].name.replace('/','-').replace('／','-')) + '.' + ext
+    filePath = os.path.join(position,songslist[chooseID].name.replace('/','-').replace('／','-').strip()) + '.' + ext
     return filePath
 
 
@@ -196,9 +196,8 @@ def downloadSongMain(downloadUrl,filename):
 
 def downloadSong(chooseID):
     songInfo = getSongInfo(songslist[chooseID].ID,songslist[chooseID].TY)
-    # pdb.set_trace()
     if songInfo is None:
-        print('{}无法下载，跳过！'.format(songslist[chooseID].name))
+        cprint('{}无法下载，跳过！'.format(songslist[chooseID].name), 'red')
         return None, None
     # Quality Higher, Priority Higher
     songSize = songInfo['sqsize']
@@ -218,9 +217,11 @@ def downloadSong(chooseID):
     fn, fn_ext = osp.splitext(osp.basename(filename))
     # print(songslist[chooseID].ID)
     orig_singer = getLyric(chooseID)
-    new_fn = '{}--{}'.format(fn, orig_singer.replace('/','-').replace('／','-'))
-    filename = filename.replace(fn, new_fn)
-
+    if orig_singer:
+        new_fn = '{}--{}'.format(fn, orig_singer.replace('/','-').replace('／','-').strip())
+        filename = filename.replace(fn, new_fn)
+    else:
+        new_fn = fn
     # print(filename)
     # pdb.set_trace()
     #print(songSize,':',os.path.getsize(filename))
@@ -231,11 +232,12 @@ def downloadSong(chooseID):
             t.start()
             print('{}下载中...'.format(new_fn))
             t.join()
-            print('{}下载完成!\n'.format(new_fn))
+            cprint('{}下载完成!\n'.format(new_fn), 'green')
         except Exception as e:
-            print('{}下载出错...\n'.format(filename))
+            print(e)
+            cprint('{}下载出错...\n'.format(filename), 'red')
     else:
-        print('{}已下载!\n'.format(new_fn))
+        cprint('{}已下载!\n'.format(new_fn), 'yellow')
     # return filename,filename
     return filename,downloadUrl
 
@@ -246,7 +248,7 @@ def loadCollection():
         with open(singer_cfg,'rb') as f:
             singerNames = pickle.load(f)
     except FileNotFoundError as e:
-        print('未找到歌手信息文件!')
+        cprint('未找到歌手信息文件!', 'red')
 
 def saveCollection():
     with open(singer_cfg,'wb') as f:
@@ -295,7 +297,7 @@ def searchSinger(singerName):
     try:
         searchRes = json.loads(str(jsonData))
     except Exception as e:
-        print("查无此歌手,请使用ID指定!")
+        cprint("查无此歌手,请使用ID指定!", 'red')
         os._exit(-1)
     return searchRes
 
@@ -475,7 +477,7 @@ def showSongList():
     print('\t\t\t\t伴奏')
     print('(共%d首)' % len(bz))
     bz_start = idx
-    # bz_start = 287
+    # bz_start = 376
     for x in bz:
         idx = idx + 1
         print(idx,':',x)
@@ -502,11 +504,11 @@ def play_music(filename,url,idx):
 def circlePlayMusic(idx):
     #print('IDX =',idx)
     if bz_start >= bz_end:
-        print('无伴奏!')
+        cprint('无伴奏!', 'red')
     else:
         for idx in range(bz_start, bz_end):
             filename,downloadUrl = downloadSong(idx)
-        print('下载完成!')
+        cprint('下载完成!', 'green')
     # play_music(filename,downloadUrl,idx)
 
 
@@ -523,6 +525,9 @@ def getLyric(chooseID):
     orig_singer = bsObj.find_all("ul", class_ = "mb15")
     if len(orig_singer) > 0:
         orig_singer = orig_singer[0].li.a.string.strip()
+    else:
+        cprint('发现坏链，开始尝试下载...', 'red')
+        return None
     '''
     lyric = re.match(r'[\s\S]*?<!--lrc-->([\s\S]*?)<!--lrc-->[\s\S]*',content)
     if lyric:
