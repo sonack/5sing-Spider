@@ -477,7 +477,7 @@ def showSongList():
     print('\t\t\t\t伴奏')
     print('(共%d首)' % len(bz))
     bz_start = idx
-    # bz_start = 376
+    # bz_start = 2007
     for x in bz:
         idx = idx + 1
         print(idx,':',x)
@@ -524,7 +524,10 @@ def getLyric(chooseID):
     bsObj = BeautifulSoup(res.content, "lxml")
     orig_singer = bsObj.find_all("ul", class_ = "mb15")
     if len(orig_singer) > 0:
-        orig_singer = orig_singer[0].li.a.string.strip()
+        try:
+            orig_singer = orig_singer[0].li.a.string.strip()
+        except Exception as e:
+            orig_singer = '未知'
     else:
         cprint('发现坏链，开始尝试下载...', 'red')
         return None
