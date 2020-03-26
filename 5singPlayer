@@ -136,12 +136,13 @@ class Song:
 
 def saveImg():
     global position
-    position  = os.path.join(directory,singerName)
+    fixedSingerName = singerName.replace('/', '-').replace('／','-').strip()
+    position  = os.path.join(directory, fixedSingerName)
     if not os.path.exists(position):
         print('创建文件夹',position,'!')
         os.makedirs(position)
     suffix = os.path.splitext(imageURL)[1]
-    imgPath = os.path.join(position,singerName + " 头像 " + suffix)
+    imgPath = os.path.join(position,fixedSingerName + " 头像 " + suffix)
     if not os.path.exists(imgPath) and imageURL:
         urllib.request.urlretrieve(imageURL,imgPath)
         cprint('头像下载成功!', 'green')
@@ -478,6 +479,8 @@ def showSongList():
     print('(共%d首)' % len(bz))
     bz_start = idx
     # bz_start = 2007
+    # bz_start = 546
+
     for x in bz:
         idx = idx + 1
         print(idx,':',x)
