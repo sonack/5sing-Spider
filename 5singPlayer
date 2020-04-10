@@ -144,8 +144,12 @@ def saveImg():
     suffix = os.path.splitext(imageURL)[1]
     imgPath = os.path.join(position,fixedSingerName + " 头像 " + suffix)
     if not os.path.exists(imgPath) and imageURL:
-        urllib.request.urlretrieve(imageURL,imgPath)
-        cprint('头像下载成功!', 'green')
+        try:
+            urllib.request.urlretrieve(imageURL,imgPath)
+            cprint('头像下载成功!', 'green')
+        except Exception as e:
+            cprint('头像下载失败...', 'yellow')
+
 
 def getDownloadPath(chooseID,ext):
     filePath = os.path.join(position,songslist[chooseID].name.replace('/','-').replace('／','-').strip()) + '.' + ext
