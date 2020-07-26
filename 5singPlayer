@@ -47,7 +47,7 @@ if not os.path.exists(config_dir):
 
 cookies_cfg = os.path.join(config_dir, 'cookies.dat')
 singer_cfg = os.path.join(config_dir, 'singers.dat')
-print(singer_cfg)
+# print(singer_cfg)
 sType = {}
 sType[0] = 'yc'
 sType[1] = 'fc'
@@ -110,12 +110,12 @@ def login5sing(update):
         login_data['remember'] = 'yes'
         r = sess.post(loginURL,data=login_data)
         if r:
-            with open(os.path.expanduser('~/bin/cookies.dat'),'wb') as f:
+            with open(cookies_cfg,'wb') as f:
                 pickle.dump(sess.cookies,f)
             cprint('\n更新Cookie成功!\n', 'green')
         return r
     else:
-        with open(os.path.expanduser('~/bin/cookies.dat'),'rb') as f:
+        with open(cookies_cfg,'rb') as f:
             sess.cookies = pickle.load(f)
         if sess.cookies:
                 cprint('\n读取Cookie成功!\n', 'green')
@@ -292,13 +292,13 @@ def downloadSong(chooseID):
 def loadCollection():
     global singerNames
     try:
-        with open(os.path.expanduser('~/bin/singers.dat'),'rb') as f:
+        with open(singer_cfg,'rb') as f:
             singerNames = pickle.load(f)
     except FileNotFoundError as e:
         cprint('未找到歌手信息文件!', 'red')
 
 def saveCollection():
-    with open(os.path.expanduser('~/bin/singers.dat'),'wb') as f:
+    with open(singer_cfg,'wb') as f:
         pickle.dump(singerNames,f)
 
 def inputSinger():
