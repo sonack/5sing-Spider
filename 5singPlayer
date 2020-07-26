@@ -16,7 +16,36 @@ import math
 import sys
 import re
 import os
+import os.path as osp
+from os.path import expanduser
+import pdb
+from progressbar import *
+from termcolor import cprint
 
+class MyProgressBar():
+    def __init__(self):
+        self.pbar = None
+
+    def __call__(self, block_num, block_size, total_size):
+        if not self.pbar:
+            self.pbar=progressbar.ProgressBar(maxval=total_size)
+            self.pbar.start()
+
+        downloaded = block_num * block_size
+        if downloaded < total_size:
+            self.pbar.update(downloaded)
+        else:
+            self.pbar.finish()
+
+
+config_dir = expanduser('~/.config/5singPlayer')
+# pdb.set_trace()
+if not os.path.exists(config_dir):
+    print('mkdirs {}'.format(config_dir))
+    os.makedirs(config_dir)
+
+cookies_cfg = os.path.join(config_dir, 'cookies.dat')
+singer_cfg = os.path.join(config_dir, 'singers.dat')
 sType = {}
 sType[0] = 'yc'
 sType[1] = 'fc'
@@ -62,7 +91,7 @@ headers = {
 sess.headers = headers
 
 def login5sing(update):
-    if update:
+    if update or (not os.path.exists(cookies_cfg)):
         print('\n登陆中...')
         #loginURL = 'http://5sing.kugou.com/login/'
         loginURL = 'http://5sing.kugou.com/m/login.html'
@@ -76,13 +105,13 @@ def login5sing(update):
         if r:
             with open(os.path.expanduser('~/bin/cookies.dat'),'wb') as f:
                 pickle.dump(sess.cookies,f)
-            print('\n更新Cookie成功!\n')
+            cprint('\n更新Cookie成功!\n', 'green')
         return r
     else:
         with open(os.path.expanduser('~/bin/cookies.dat'),'rb') as f:
             sess.cookies = pickle.load(f)
         if sess.cookies:
-                print('\n读取Cookie成功!\n')
+                cprint('\n读取Cookie成功!\n', 'green')
         return sess.cookies
 
 def br2gn(s):
@@ -107,18 +136,23 @@ class Song:
 
 def saveImg():
     global position
-    position  = os.path.join(directory,singerName)
+    fixedSingerName = singerName.replace('/', '-').replace('／','-').strip()
+    position  = os.path.join(directory, fixedSingerName)
     if not os.path.exists(position):
         print('创建文件夹',position,'!')
         os.makedirs(position)
     suffix = os.path.splitext(imageURL)[1]
-    imgPath = os.path.join(position,singerName + " 头像 " + suffix)
+    imgPath = os.path.join(position,fixedSingerName + " 头像 " + suffix)
     if not os.path.exists(imgPath) and imageURL:
-        urllib.request.urlretrieve(imageURL,imgPath)
-        print('头像下载成功!')
+        try:
+            urllib.request.urlretrieve(imageURL,imgPath)
+            cprint('头像下载成功!', 'green')
+        except Exception as e:
+            cprint('头像下载失败...', 'yellow')
+
 
 def getDownloadPath(chooseID,ext):
-    filePath = os.path.join(position,songslist[chooseID].name) + '.' + ext
+    filePath = os.path.join(position,songslist[chooseID].name.replace('/','-').replace('／','-').strip()) + '.' + ext
     return filePath
 
 
@@ -148,19 +182,28 @@ def getSongInfo(songID,songType):
     params['songid'] = songID
     params['songtype'] = songType
     res = sess.get(getSongUrl,params = params)
+    # pdb.set_trace()
+    res_dict = json.loads(res.content.decode('UTF8'))
+    if not res_dict['success']:
+        return None
     return json.loads(res.content.decode('UTF8'))['data']
 
 
 def downloadSongMain(downloadUrl,filename):
   while True:
     try:
-        urllib.request.urlretrieve(downloadUrl,filename)
+        urllib.request.urlretrieve(downloadUrl,filename, MyProgressBar())
     except Exception as e:
-        continue
+        print(e)
+        break
     else:
         break
+
 def downloadSong(chooseID):
     songInfo = getSongInfo(songslist[chooseID].ID,songslist[chooseID].TY)
+    if songInfo is None:
+        cprint('{}无法下载，跳过！'.format(songslist[chooseID].name), 'red')
+        return None, None
     # Quality Higher, Priority Higher
     songSize = songInfo['sqsize']
     downloadUrl = songInfo['squrl']
@@ -176,17 +219,33 @@ def downloadSong(chooseID):
             if downloadUrl == '':
                 print('无法解析音乐地址!')
     filename = getDownloadPath(chooseID,ext)
+    fn, fn_ext = osp.splitext(osp.basename(filename))
+    # print(songslist[chooseID].ID)
+    orig_singer = getLyric(chooseID)
+    if orig_singer:
+        new_fn = '{}--{}'.format(fn, orig_singer.replace('/','-').replace('／','-').strip())
+        filename = filename.replace(fn, new_fn)
+    else:
+        new_fn = fn
+    # print(filename)
+    # pdb.set_trace()
     #print(songSize,':',os.path.getsize(filename))
-    if (not os.path.exists(filename)) or (songSize - os.path.getsize(filename)) > errorAllow:
+
+    if (not os.path.exists(filename)) or (int(songSize) - os.path.getsize(filename)) > errorAllow:
         try:
             t = threading.Thread(target=downloadSongMain,args = (downloadUrl,filename),name='DownloadThread')
             t.start()
-            print('缓存中...')
-            return filename,downloadUrl
+            print('{}下载中...'.format(new_fn))
+            t.join()
+            cprint('{}下载完成!\n'.format(new_fn), 'green')
         except Exception as e:
-            print('下载出错...')
-    print('已缓存')
-    return filename,filename
+            print(e)
+            cprint('{}下载出错...\n'.format(filename), 'red')
+    else:
+        cprint('{}已下载!\n'.format(new_fn), 'yellow')
+    # return filename,filename
+    return filename,downloadUrl
+
 
 def loadCollection():
     global singerNames
@@ -194,7 +253,7 @@ def loadCollection():
         with open(os.path.expanduser('~/bin/singers.dat'),'rb') as f:
             singerNames = pickle.load(f)
     except FileNotFoundError as e:
-        print('未找到歌手信息文件!')
+        cprint('未找到歌手信息文件!', 'red')
 
 def saveCollection():
     with open(os.path.expanduser('~/bin/singers.dat'),'wb') as f:
@@ -243,7 +302,7 @@ def searchSinger(singerName):
     try:
         searchRes = json.loads(str(jsonData))
     except Exception as e:
-        print("查无此歌手,请使用ID指定!")
+        cprint("查无此歌手,请使用ID指定!", 'red')
         os._exit(-1)
     return searchRes
 
@@ -264,7 +323,7 @@ def displaySingerInfo(searchRes, searchName):
     print('\n============================================================================\n')
     print('歌手信息如下:')
     print('姓名:\t%s' % name)
-    print('性别:\t%s' % '女' if sex else 男)
+    print('性别:\t%s' % '女' if sex else '男')
     print('城市:\t%s' % city)
     print('风格:\t%s' % style)
     print('粉丝数:\t%s' % fans)
@@ -325,7 +384,7 @@ def processList(singerID,i):
 '''
 def WriteCache(cache_obj):
     print ('写入缓存对象...')
-    print (cache_obj)
+    # print (cache_obj)
     with open(CacheName,'wb') as f:
         pickle.dump(cache_obj, f)
 
@@ -405,6 +464,7 @@ os.system('play 歌曲1.mp3')
 '''
 
 def showSongList():
+    global bz_start, bz_end
     print('\n============================================================================')
     print('\t\t\t\t原创')
     print('(共%d首)' % len(yc))
@@ -421,9 +481,14 @@ def showSongList():
     print('-------------------------------------')
     print('\t\t\t\t伴奏')
     print('(共%d首)' % len(bz))
+    bz_start = idx
+    # bz_start = 2007
+    # bz_start = 546
+
     for x in bz:
         idx = idx + 1
         print(idx,':',x)
+    bz_end = idx
     print('============================================================================\n\n')
 
 def play_music(filename,url,idx):
@@ -442,12 +507,16 @@ def play_music(filename,url,idx):
         if status or endTime - startTime > limitTime:
             break
 
-
 # Change into Single Thread to Circle Music(aka. cancel operates)
 def circlePlayMusic(idx):
     #print('IDX =',idx)
-    filename,downloadUrl = downloadSong(idx)
-    play_music(filename,downloadUrl,idx)
+    if bz_start >= bz_end:
+        cprint('无伴奏!', 'red')
+    else:
+        for idx in range(bz_start, bz_end):
+            filename,downloadUrl = downloadSong(idx)
+        cprint('下载完成!', 'green')
+    # play_music(filename,downloadUrl,idx)
 
 
 def quit(signum,frame):
@@ -457,17 +526,31 @@ def quit(signum,frame):
 def getLyric(chooseID):
     srcUrl = 'http://5sing.kugou.com/'+ songslist[chooseID].TY + '/' + str(songslist[chooseID].ID) + '.html'
     res = sess.get(srcUrl)
-    content = res.content.decode('UTF8')
+    # content = res.content.decode('UTF8')
+
+    bsObj = BeautifulSoup(res.content, "lxml")
+    orig_singer = bsObj.find_all("ul", class_ = "mb15")
+    if len(orig_singer) > 0:
+        try:
+            orig_singer = orig_singer[0].li.a.string.strip()
+        except Exception as e:
+            orig_singer = '未知'
+    else:
+        cprint('发现坏链，开始尝试下载...', 'red')
+        return None
+    '''
     lyric = re.match(r'[\s\S]*?<!--lrc-->([\s\S]*?)<!--lrc-->[\s\S]*',content)
     if lyric:
         lyric = lyric.group(1)
         lyric = br2gn(html.unescape(lyric)).strip()
         lyric = re.sub('\[.+?\]|<[^<]+?>', '', lyric)
+    # pdb.set_trace()    
     inspire = re.match(r'[\s\S]*?<!--inspiration-->([\s\S]*?)<!--inspiration-->[\s\S]*',content)
     if inspire:
         inspire = inspire.group(1)
         inspire = br2gn(html.unescape(inspire)).strip()
         inspire = re.sub('\[.+?\]|<[^<]+?>', '', inspire)
+    pdb.set_trace()
     os.system('clear')
     print('灵感\n\t')
     if not inspire:
@@ -480,6 +563,8 @@ def getLyric(chooseID):
     else:
         print('\t'+lyric)
     print('\n============================================================================\n')
+    '''
+    return orig_singer
 
 def displaySingleComment(comment):
     #print(comment['createTime']+'\t'+comment['user']['NN']+'说:“',comment['content']+'~”')
@@ -594,9 +679,11 @@ if __name__ == '__main__':
                         openInBrowser(oldidx)
                         continue
                     elif idx == 'n' or idx == '':
-                          idx = (oldidx + 1) % len(songslist)
+                        idx = (oldidx + 1) % len(songslist)
                     elif idx == 'p':
-                          idx = (oldidx - 1 + len(songslist)) % len(songslist)
+                        idx = (oldidx - 1 + len(songslist)) % len(songslist)
+                    elif idx == 'd':
+                        break
                     else:
                         idx = int(idx)
                         if idx == 0 or abs(idx) > len(songslist):
