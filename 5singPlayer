@@ -133,10 +133,11 @@ def br2gn(s):
     return s
 
 class Song:
-    def __init__(self,name,ID,TY):
+    def __init__(self, name, ID, TY, origSinger = None):
         self.name = name
         self.ID = ID
         self.TY = TY
+        self.origSinger = origSinger
     def __str__(self):
         return self.name;
 
@@ -147,11 +148,14 @@ def saveImg():
     # pdb.set_trace()
     if status == 3:
         fixedSingerName = '#' + fixedSingerName
+    elif status == 4:
+        fixedSingerName = '@' + fixedSingerName
+
     position  = os.path.join(directory, fixedSingerName)
     if not os.path.exists(position):
         print('创建文件夹',position,'!')
         os.makedirs(position)
-    if status != 3:
+    if status not in [3, 4]:
         suffix = os.path.splitext(imageURL)[1]
         imgPath = os.path.join(position,fixedSingerName + " 头像 " + suffix)
         if not os.path.exists(imgPath) and imageURL:
@@ -230,9 +234,8 @@ def downloadSongMain(downloadUrl,filename):
 def downloadSong(chooseID):
     song = songslist[chooseID]
     level, songInfo = getSongInfo(song)
-    # pdb.set_trace()
     if songInfo is None or (level == 2 and songInfo['fileName'] is None):
-        cprint('{}无法下载，跳过！'.format(song.name), 'red')
+        cprint('{}无法下载，跳过！\n'.format(song.name), 'red')
         return None, None
     # Quality Higher, Priority Higher
     if level == 1:
@@ -262,8 +265,7 @@ def downloadSong(chooseID):
     filename = getDownloadPath(chooseID, ext)
     fn, fn_ext = osp.splitext(osp.basename(filename))
     # print(songslist[chooseID].ID)
-    orig_singer = singerID if status == 3 else getLyric(chooseID)
-    # pdb.set_trace()
+    orig_singer = song.origSinger if status in [3, 4] else getLyric(chooseID)
     if orig_singer:
         new_fn = '{}--{}'.format(fn, orig_singer.replace('/','-').replace('／','-').strip())
         filename = filename.replace(fn, new_fn)
@@ -310,7 +312,13 @@ def inputSinger():
     else:
         for i,x in enumerate(singerNames):
             flag = x['flag']
-            name = '#{}'.format(x['name']) if flag == 3 else x['name']
+            if flag == 3:
+                name = '#{}'.format(x['name'])
+            elif flag == 4:
+                name = '@{}'.format(x['name'])
+            else:
+                name = x['name']
+            # name = '#{}'.format(x['name']) if flag == 3 else x['name']
             print(i+1,":",name)
     try:
         singerName = input('\n请输入歌手名称或ID号(以%开头) 或者 伴奏原唱歌手名称(以#开头):\t')
@@ -325,6 +333,9 @@ def inputSinger():
         singerName = singerName[1:]
     elif singerName[0] == '#':
         status = 3
+        singerName = singerName[1:]
+    elif singerName[0] == '@':
+        status = 4
         singerName = singerName[1:]
     try:
         singerIdx = int(singerName)
@@ -481,7 +492,7 @@ def getAllSongs(ID, status):
     fc = []
     bz = []
     print('正在获取歌曲......')
-    if status == 3:
+    if status in [3, 4]:
         # print('processBzYcList with pageIdx =', pageIdx)
         processBzYcList(ID, pageIdx)
     else:
@@ -531,7 +542,7 @@ def showSongList():
         print(idx,':',x)
     print('-------------------------------------')
     print('\t\t\t\t伴奏')
-    if status == 3:
+    if status in [3, 4]:
         print('(第{}页，共{}页)'.format(pageIdx, totalPage))
     else:
         print('(共%d首)' % len(bz))
@@ -674,7 +685,7 @@ def processBzYcList(YcName, pageIdx = 1):
     # 页码
     params['page'] = pageIdx
     # 根据原唱查找伴奏
-    params['filter'] = 30
+    params['filter'] = 30 if status == 3 else 3     # set to 3 when status == 4
     # 查找歌曲，而非歌单或音乐人
     params['type'] = 0
     res = sess.get(SearchBzYcUrl, params = params)
@@ -682,7 +693,17 @@ def processBzYcList(YcName, pageIdx = 1):
     totalPage = resObj['pageInfo']['totalPages']
     songs = resObj['list']
     for song in songs:
-        bz.append(Song(song['songName'].strip(),song['songId'], 'bz'))
+        songName = song['songName'].strip()
+        singer = song['singer'].strip()
+        origSinger = song.get('originSinger')
+        if not origSinger:
+            origSinger = '未知'
+        if status == 4:
+            # TODO
+            songName = songName[20:-5] + '_' + singer
+        # bz.append(Song(song['songName'].strip(),song['songId'], 'bz'))
+        bz.append(Song(songName, song['songId'], 'bz', origSinger))
+
 
 def selectSinger():
     global singerNames, singerName, singerID, idx, status
@@ -693,7 +714,7 @@ def selectSinger():
     elif status == 2:
         singerID = NameOrID
         singerName = getSingerName(singerID)
-    elif status == 3:
+    elif status in [3, 4]:
         # 处理伴奏原创查询
         singerID = NameOrID
         singerName = NameOrID
@@ -722,7 +743,13 @@ def saveToOutFile(selectPane, ID, status):
     global yc, fc, bz
     selectPane = selectPane.format(ID)
     pane = open(selectPane, 'w')
-    cacheID = '#'+ID if status == 3 else ID
+    if status == 3:
+        cacheID = '#' + ID
+    elif status == 4:
+        cacheID = '@' + ID
+    else:
+        cacheID = ID
+    # cacheID = '#'+ID if status == 3 else ID
     update = UpdateCache(cacheID)
     if useCacheList and not update:
         print ('找到缓存歌单......')
@@ -733,7 +760,7 @@ def saveToOutFile(selectPane, ID, status):
     else:
         # cache miss
         # get all pages
-        if status == 3:
+        if status in [3, 4]:
             bz = []
             cprint('第一次缓存较慢','yellow')
             for pid in tqdm(range(1, totalPage + 1)):
@@ -752,7 +779,7 @@ def saveToOutFile(selectPane, ID, status):
     for desc, seg in zip(['原创', '翻唱', '伴奏'], [yc, fc, bz]):
         pane.write('####################{}####################\n'.format(desc))
         for song in seg:
-            pane.write('{}\t{}\n'.format(song.name, song.ID))
+            pane.write('{}\t{}\t{}\n'.format(song.name, song.origSinger, song.ID))
         print('共发现{}首{}'.format(len(seg), desc))
 
     pane.write('####################{}####################\n'.format('END'))
@@ -792,12 +819,10 @@ def loadFromOutFile(selectPane, ID):
                 curSeg = segMap[curSegDesc]
             else:
                 fields = line.split()
-                id = fields[-1]
-                name = "".join(fields[:-1])
-                # print(name, '###', id)
-                # pdb.set_trace()
-                id = int(id)
-                curSeg.append(Song(name, id, typeMap[curSegDesc]))
+                id = int(fields[-1])
+                orig_singer = fields[-2]
+                name = "_".join(fields[:-2])
+                curSeg.append(Song(name, id, typeMap[curSegDesc], orig_singer))
         except Exception as e:
             print(e)
             print('skip invalid line {} : {}'.format(idx + 1, line))
