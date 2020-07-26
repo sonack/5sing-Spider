@@ -41,11 +41,11 @@ singerNames.append({'name':'封茗囧菌','flag':1})
 singerNames.append({'name':'Midaho','flag':1})
 '''
 
-directory = '/home/snk/Music/5sing'
+directory = os.path.expanduser('~/Music/5sing')
 position = directory
 singerName = "未命名"
 useCacheList = True
-CacheName="/home/snk/.5SING_CACHE"
+CacheName= os.path.expanduser("~/.5SING_CACHE")
 CacheObj = {}
 UPDATE_INTERVAL = 24 * 60 * 60  # 1 day time in seconds
 
@@ -74,12 +74,12 @@ def login5sing(update):
         login_data['remember'] = 'yes'
         r = sess.post(loginURL,data=login_data)
         if r:
-            with open('/home/snk/bin/cookies.dat','wb') as f:
+            with open(os.path.expanduser('~/bin/cookies.dat'),'wb') as f:
                 pickle.dump(sess.cookies,f)
             print('\n更新Cookie成功!\n')
         return r
     else:
-        with open('/home/snk/bin/cookies.dat','rb') as f:
+        with open(os.path.expanduser('~/bin/cookies.dat'),'rb') as f:
             sess.cookies = pickle.load(f)
         if sess.cookies:
                 print('\n读取Cookie成功!\n')
@@ -191,13 +191,13 @@ def downloadSong(chooseID):
 def loadCollection():
     global singerNames
     try:
-        with open('/home/snk/bin/singers.dat','rb') as f:
+        with open(os.path.expanduser('~/bin/singers.dat'),'rb') as f:
             singerNames = pickle.load(f)
     except FileNotFoundError as e:
         print('未找到歌手信息文件!')
 
 def saveCollection():
-    with open('/home/snk/bin/singers.dat','wb') as f:
+    with open(os.path.expanduser('~/bin/singers.dat'),'wb') as f:
         pickle.dump(singerNames,f)
 
 def inputSinger():
