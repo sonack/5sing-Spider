@@ -141,9 +141,12 @@ class Song:
         return self.name;
 
 
-def saveImg(status = 1):
+def saveImg():
     global position
     fixedSingerName = singerName.replace('/', '-').replace('／','-').strip()
+    # pdb.set_trace()
+    if status == 3:
+        fixedSingerName = '#' + fixedSingerName
     position  = os.path.join(directory, fixedSingerName)
     if not os.path.exists(position):
         print('创建文件夹',position,'!')
@@ -184,7 +187,9 @@ def getDownloadURL(chooseID):
     return getInfoDict(ID,TY)['data']['url']
 '''
 
-def getSongInfo(songID, songType):
+def getSongInfo(song):
+    songID = song.ID
+    songType = song.TY
     getSongUrl = 'http://mobileapi.5sing.kugou.com/song/getSongUrl'
     params = {}
     params['songid'] = songID
@@ -193,12 +198,15 @@ def getSongInfo(songID, songType):
     res = sess.get(getSongUrl,params = params)
     res_dict = json.loads(res.content.decode('UTF8'))
     if not res_dict['success']:
-        return getSongInfoBack(songID, songType)
+        return getSongInfoBack(song)
     return 1, res_dict['data']
 
 # 备用下载方案
-def getSongInfoBack(songID, songType):
-    cprint('原始下载方案无效，自动启用备用下载方案...', 'yellow')
+def getSongInfoBack(song):
+    songID = song.ID
+    songType = song.TY
+    songName = song.name
+    cprint('[{}]:原始下载方案无效，自动启用备用下载方案...'.format(songName), 'yellow')
     getSongUrl = 'http://service.5sing.kugou.com/song/getPermission?'
     params = {}
     params['songId'] = songID
@@ -220,10 +228,11 @@ def downloadSongMain(downloadUrl,filename):
         break
 
 def downloadSong(chooseID):
-    level, songInfo = getSongInfo(songslist[chooseID].ID,songslist[chooseID].TY)
+    song = songslist[chooseID]
+    level, songInfo = getSongInfo(song)
     # pdb.set_trace()
     if songInfo is None:
-        cprint('{}无法下载，跳过！'.format(songslist[chooseID].name), 'red')
+        cprint('{}无法下载，跳过！'.format(song.name), 'red')
         return None, None
     # Quality Higher, Priority Higher
     if level == 1:
@@ -314,11 +323,9 @@ def inputSinger():
     elif singerName[0] == '%':
         status = 2
         singerName = singerName[1:]
-        # return 2,singerName[1:]
     elif singerName[0] == '#':
         status = 3
         singerName = singerName[1:]
-        # return 3,singerName[1:]
     try:
         singerIdx = int(singerName)
         if abs(singerIdx) <= len(singerNames):
@@ -524,7 +531,10 @@ def showSongList():
         print(idx,':',x)
     print('-------------------------------------')
     print('\t\t\t\t伴奏')
-    print('(共%d首)' % len(bz))
+    if status == 3:
+        print('(第{}页，共{}页)'.format(pageIdx, totalPage))
+    else:
+        print('(共%d首)' % len(bz))
     bz_start = idx
     # bz_start = 2007
     # bz_start = 546
@@ -554,7 +564,7 @@ def play_music(filename,url,idx):
 # Change into Single Thread to Circle Music(aka. cancel operates)
 def circlePlayMusic(idx):
     #print('IDX =',idx)
-    print('伴奏范围:', bz_start, bz_end)
+    print('伴奏范围: {} -> {}'.format(bz_start, bz_end))
     if bz_start >= bz_end:
         cprint('无伴奏!', 'red')
     else:
@@ -675,7 +685,7 @@ def processBzYcList(YcName, pageIdx = 1):
         bz.append(Song(song['songName'].strip(),song['songId'], 'bz'))
 
 def selectSinger():
-    global singerNames,singerName,singerID,idx
+    global singerNames, singerName, singerID, idx, status
     status,NameOrID = inputSinger()
     # pdb.set_trace()
     if status == 1:
@@ -696,7 +706,7 @@ def selectSinger():
         singerNames.append(singerDict)
         saveCollection()
     
-    saveImg(status)
+    saveImg()
     getAllSongs(singerID, status)
     showSongList()
     return singerName, status
@@ -725,6 +735,7 @@ def saveToOutFile(selectPane, ID, status):
         # get all pages
         if status == 3:
             bz = []
+            cprint('第一次缓存较慢','yellow')
             for pid in tqdm(range(1, totalPage + 1)):
                 processBzYcList(ID, pid)
         if useCacheList:
@@ -772,7 +783,7 @@ def loadFromOutFile(selectPane, ID):
     for idx, line in enumerate(lines):
         try:
             # seg desc line
-            if line.startswith('#'):
+            if line.startswith('####################'):
                 if curSegDesc != '未知':
                     print('成功读取{}首{}'.format(len(curSeg), curSegDesc))
                 curSegDesc = line.strip('#\n')
@@ -853,20 +864,29 @@ if __name__ == '__main__':
                         idx = (oldidx - 1 + len(songslist)) % len(songslist)
                     elif idx == 'd':
                         break
-                    elif idx in ['-', '+']:
-                        # bzyc翻页
-                        if idx == '-':
-                            pageIdx -= 1
-                            pageIdx = max(pageIdx, 1)
-                        else:
-                            pageIdx += 1
-                            pageIdx = min(pageIdx, totalPage)
-
-                        if status == 3:
-                            # clear all songs and reget
-                            getAllSongs(singerID, status)
-                            showSongList()
+                    elif idx.startswith(('+', '-', 'j')):
+                        op = idx[0]
+                        # bzyc翻页与跳转
+                        try:
+                            idx = int(idx[1:])
+                        except Exception as e:
+                            idx = 1
+                        if status != 3:
                             continue
+                        if op == '-':
+                            pageIdx -= idx
+                            pageIdx = max(pageIdx, 1)
+                        elif op == '+':
+                            pageIdx += idx
+                            pageIdx = min(pageIdx, totalPage)
+                        elif op == 'j':
+                            pageIdx = idx
+                            pageIdx = max(1, min(pageIdx, totalPage))
+                            
+                        # clear all songs and reget
+                        getAllSongs(singerID, status)
+                        showSongList()
+                        continue
                     # get all songs available
                     elif idx == 'ga':
                         saveToOutFile(paneFile, singerID, status)
@@ -875,6 +895,8 @@ if __name__ == '__main__':
                     elif idx == 'ds':
                         loadFromOutFile(paneFile, singerID)
                         break
+                    elif idx == 'q':
+                        sys.exit(0)
                     else:
                         idx = int(idx)
                         if idx == 0 or abs(idx) > len(songslist):
