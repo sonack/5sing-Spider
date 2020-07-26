@@ -214,7 +214,7 @@ def getSongInfoBack(song):
     res = sess.get(getSongUrl,params = params)
     res_dict = json.loads(res.content.decode('UTF8'))
     if not res_dict['success']:
-        return None
+        return 2, None
     return 2, res_dict['data']
 
 def downloadSongMain(downloadUrl,filename):
@@ -231,7 +231,7 @@ def downloadSong(chooseID):
     song = songslist[chooseID]
     level, songInfo = getSongInfo(song)
     # pdb.set_trace()
-    if songInfo is None:
+    if songInfo is None or (level == 2 and songInfo['fileName'] is None):
         cprint('{}无法下载，跳过！'.format(song.name), 'red')
         return None, None
     # Quality Higher, Priority Higher
