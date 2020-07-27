@@ -23,6 +23,7 @@ from progressbar import *
 from termcolor import cprint
 from tqdm import tqdm
 
+
 class MyProgressBar():
     def __init__(self):
         self.pbar = None
@@ -265,7 +266,8 @@ def downloadSong(chooseID):
     filename = getDownloadPath(chooseID, ext)
     fn, fn_ext = osp.splitext(osp.basename(filename))
     # print(songslist[chooseID].ID)
-    orig_singer = song.origSinger if status in [3, 4] else getLyric(chooseID)
+    # orig_singer = song.origSinger if status in [3, 4] else getLyric(chooseID)
+    orig_singer = song.origSinger
     if orig_singer:
         new_fn = '{}--{}'.format(fn, orig_singer.replace('/','-').replace('／','-').strip())
         filename = filename.replace(fn, new_fn)
@@ -337,6 +339,13 @@ def inputSinger():
     elif singerName[0] == '@':
         status = 4
         singerName = singerName[1:]
+    # delete cache file
+    elif singerName == 'clear':
+        os.system('rm -f {}'.format(CacheName))
+        os.system('rm -f {}'.format(singer_cfg))
+        os.system('rm -f {}'.format(cookies_cfg))
+        cprint('删除缓存及记录文件成功!', 'green')
+        sys.exit(0)
     try:
         singerIdx = int(singerName)
         if abs(singerIdx) <= len(singerNames):
@@ -479,12 +488,16 @@ def processListByAPI(singerID,i):
         if len(allSongs) == 0:
             break
         for song in allSongs:
+            # pdb.set_trace()
+            songID = song['ID']
+            songTY = song['SK']
+            origSinger = getOrigSinger(songTY, songID)
             if song['SK'] == 'yc':
-                yc.append(Song(song['SN'].strip(),song['ID'],'yc'))
+                yc.append(Song(song['SN'].strip(),song['ID'],'yc', origSinger))
             elif song['SK'] == 'fc':
-                fc.append(Song(song['SN'].strip(),song['ID'],'fc'))
+                fc.append(Song(song['SN'].strip(),song['ID'],'fc', origSinger))
             elif song['SK'] == 'bz':
-                bz.append(Song(song['SN'].strip(),song['ID'],'bz'))
+                bz.append(Song(song['SN'].strip(),song['ID'],'bz', origSinger))
 
 def getAllSongs(ID, status):
     global songslist,yc,fc,bz
@@ -589,22 +602,42 @@ def quit(signum,frame):
     print('\nBye~')
     os._exit(0)
 
-def getLyric(chooseID):
-    srcUrl = 'http://5sing.kugou.com/'+ songslist[chooseID].TY + '/' + str(songslist[chooseID].ID) + '.html'
+def getOrigSinger(songTY, songID):
+    srcUrl = 'http://5sing.kugou.com/'+ songTY + '/' + str(songID) + '.html'
     res = sess.get(srcUrl)
     # content = res.content.decode('UTF8')
 
     bsObj = BeautifulSoup(res.content, "lxml")
     orig_singer = bsObj.find_all("ul", class_ = "mb15")
-    # pdb.set_trace()
     if len(orig_singer) > 0:
         try:
-            orig_singer = orig_singer[0].li.a.string.strip()
+            # orig_singer = orig_singer[0].li.a.string.strip()
+            orig_singer = orig_singer[0].find_all('li')[1].a.string.strip()
         except Exception as e:
             orig_singer = '未知'
     else:
-        cprint('发现坏链，开始尝试下载...', 'red')
-        return None
+        # cprint('发现坏链，开始尝试下载...', 'red')
+        orig_singer = '未知'
+        # return None
+    return orig_singer
+    
+
+# def getLyric(chooseID):
+#     srcUrl = 'http://5sing.kugou.com/'+ songslist[chooseID].TY + '/' + str(songslist[chooseID].ID) + '.html'
+#     res = sess.get(srcUrl)
+#     # content = res.content.decode('UTF8')
+
+#     bsObj = BeautifulSoup(res.content, "lxml")
+#     orig_singer = bsObj.find_all("ul", class_ = "mb15")
+#     # pdb.set_trace()
+#     if len(orig_singer) > 0:
+#         try:
+#             orig_singer = orig_singer[0].li.a.string.strip()
+#         except Exception as e:
+#             orig_singer = '未知'
+#     else:
+#         cprint('发现坏链，开始尝试下载...', 'red')
+#         return None
     '''
     lyric = re.match(r'[\s\S]*?<!--lrc-->([\s\S]*?)<!--lrc-->[\s\S]*',content)
     if lyric:
@@ -631,7 +664,7 @@ def getLyric(chooseID):
         print('\t'+lyric)
     print('\n============================================================================\n')
     '''
-    return orig_singer
+    # return orig_singer
 
 def displaySingleComment(comment):
     #print(comment['createTime']+'\t'+comment['user']['NN']+'说:“',comment['content']+'~”')
@@ -695,12 +728,15 @@ def processBzYcList(YcName, pageIdx = 1):
     for song in songs:
         songName = song['songName'].strip()
         singer = song['singer'].strip()
-        origSinger = song.get('originSinger')
+        if singer == 'NULL':
+            singer = '未知'
+        origSinger = song.get('originSinger', None)
+        # deal with origSinger is empty str
         if not origSinger:
             origSinger = '未知'
         if status == 4:
-            # TODO
-            songName = songName[20:-5] + '_' + singer
+            # songName = songName[20:-5] + '_' + singer
+            songName = BeautifulSoup(songName, 'lxml').findAll(text = True)[0] + '_' + singer
         # bz.append(Song(song['songName'].strip(),song['songId'], 'bz'))
         bz.append(Song(songName, song['songId'], 'bz', origSinger))
 
@@ -774,9 +810,9 @@ def saveToOutFile(selectPane, ID, status):
             CacheObj[cacheID] = CacheSingerObj
             WriteCache(CacheObj)
 
-    if len(bz) == 0:
-        print('无伴奏，请确保首先选择了有伴奏的歌手!')
-    for desc, seg in zip(['原创', '翻唱', '伴奏'], [yc, fc, bz]):
+    for desc, seg in zip(('原创', '翻唱', '伴奏'), (yc, fc ,bz)):
+        if len(seg) == 0:
+            cprint('无{}.'.format(desc), 'yellow')
         pane.write('####################{}####################\n'.format(desc))
         for song in seg:
             pane.write('{}\t{}\t{}\n'.format(song.name, song.origSinger, song.ID))
