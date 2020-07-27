@@ -23,6 +23,16 @@ from progressbar import *
 from termcolor import cprint
 from tqdm import tqdm
 
+# 多线程下载
+import multiprocessing as mp
+import socket
+
+# Set the default timeout in seconds
+timeout = 20
+# 同时下载数量
+processCnt = 8
+socket.setdefaulttimeout(timeout)
+
 
 class MyProgressBar():
     def __init__(self):
@@ -225,7 +235,11 @@ def getSongInfoBack(song):
 def downloadSongMain(downloadUrl,filename):
   while True:
     try:
-        urllib.request.urlretrieve(downloadUrl,filename, MyProgressBar())
+        dirname = os.path.dirname(filename)
+        if not os.path.exists(dirname):
+            os.mkdir(dirname)
+    
+        urllib.request.urlretrieve(downloadUrl, filename, MyProgressBar())
     except Exception as e:
         print(e)
         break
@@ -587,14 +601,24 @@ def play_music(filename,url,idx):
 
 # Change into Single Thread to Circle Music(aka. cancel operates)
 def circlePlayMusic(idx):
+    if processCnt > 1:
+        pool = mp.Pool(processes = processCnt)
     #print('IDX =',idx)
-    print('伴奏范围: {} -> {}'.format(bz_start, bz_end))
+    # print('伴奏范围: {} -> {}'.format(bz_start, bz_end))
     if bz_start >= bz_end:
         cprint('无伴奏!', 'red')
     else:
-        for idx in range(bz_start, bz_end):
-            filename,downloadUrl = downloadSong(idx)
-        cprint('下载完成!', 'green')
+        for idx in range(bz_start, bz_end, processCnt):
+            if processCnt == 1:
+                filename,downloadUrl = downloadSong(idx)
+            elif processCnt > 1:
+                res = pool.map(downloadSong, list(range(idx, min(idx + processCnt, bz_end))))
+            # filename,downloadUrl = downloadSong(idx + 1)
+            # filename,downloadUrl = downloadSong(idx + 2)
+            # filename,downloadUrl = downloadSong(idx + 3)
+            # print(res)
+            # pdb.set_trace()
+        cprint('下载完成!', 'blue')
     # play_music(filename,downloadUrl,idx)
 
 
@@ -953,7 +977,12 @@ if __name__ == '__main__':
                         saveToOutFile(paneFile, singerID, status)
                         continue
                     # download selected songs
-                    elif idx == 'ds':
+                    elif idx.startswith('ds'):
+                        if idx == 'ds':
+                            processCnt = 1
+                        else:
+                            processCnt = int(idx[2:])
+                            cprint('同时用{}个线程下载音乐!'.format(processCnt), 'yellow')
                         loadFromOutFile(paneFile, singerID)
                         break
                     elif idx == 'q':
